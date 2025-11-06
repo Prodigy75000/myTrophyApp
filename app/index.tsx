@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { DrawerToggleButton } from "@react-navigation/drawer";
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
 } from "react-native";
 import WebView from "react-native-webview";
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 export default function HomeScreen() {
   const [showWebView, setShowWebView] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -17,6 +20,7 @@ export default function HomeScreen() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [trophies, setTrophies] = useState<any>(null);
+
 
   // 👉 Local backend during dev (make sure this matches your machine IP)
   const PROXY_BASE_URL = "http://192.168.1.151:4000";
@@ -100,15 +104,18 @@ const handlePSNLogin = async () => {
 
   // ---- UI ----
   return (
-    <ScrollView
+   <ScrollView
       contentContainerStyle={{
         flexGrow: 1,
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-start",  // move content slightly down
         backgroundColor: "#000",
         paddingVertical: 40,
       }}
-    >
+    >  {/* ☰ Drawer Button */}
+      <View style={{ alignSelf: "flex-start", marginLeft: 20, marginBottom: 10 }}>
+        <DrawerToggleButton tintColor="#fff" />
+      </View>
       <Text style={{ fontSize: 24, color: "gold", marginBottom: 30 }}>
         🏆 Welcome to Trophy Hub
       </Text>
@@ -221,7 +228,9 @@ const handlePSNLogin = async () => {
               • {game.trophyTitleName}
             </Text>
           ))}
+          
         </View>
+        
       )}
     </ScrollView>
   );

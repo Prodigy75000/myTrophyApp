@@ -85,7 +85,7 @@ export default function SideMenu(props: DrawerContentComponentProps) {
             {/* Uncomment this once context user is working */}
             {/* <Image
               source={{ uri: user?.avatarUrl }}
-              style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 8 }}
+              style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 6 }}
             /> */}
             <Text style={{ color: "#fff", fontSize: 20 }}>
               {user?.onlineId || "PSN User"}

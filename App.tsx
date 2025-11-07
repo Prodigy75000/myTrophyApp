@@ -1,39 +1,30 @@
-import * as React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View } from 'react-native';
+import { createDrawerNavigator } from "@react-navigation/drawer";
+import { NavigationContainer } from "@react-navigation/native";
+import React from "react";
+import HomeScreen from "./app/index";
+import LibraryScreen from "./app/library";
+import SideMenu from "./components/SideMenu";
+import { TrophyProvider } from "./TrophyContext";
 
-function HomeScreen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>🏠 Home Screen</Text>
-    </View>
-  );
-}
-
-function LibraryScreen() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>🏆 Library Screen</Text>
-    </View>
-  );
-}
-
-const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: { backgroundColor: '#0a0a0a' },
-          tabBarActiveTintColor: '#FFD700',
-        }}
-      >
-        <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Library" component={LibraryScreen} />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <TrophyProvider>
+      <NavigationContainer>
+        <Drawer.Navigator
+          initialRouteName="index"
+          drawerContent={(props) => <SideMenu {...props} />}
+          screenOptions={{
+            headerShown: false,
+            drawerStyle: { backgroundColor: "#0b0e13" },
+            drawerInactiveTintColor: "#fff",
+          }}
+        >
+          <Drawer.Screen name="index" component={HomeScreen} />
+          <Drawer.Screen name="library" component={LibraryScreen} />
+        </Drawer.Navigator>
+      </NavigationContainer>
+    </TrophyProvider>
   );
 }

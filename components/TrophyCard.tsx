@@ -17,41 +17,79 @@ export default function TrophyCard({ title, icon, progress, counts }: TrophyCard
   return (
     <View
       style={{
+        flexDirection: "row",
+        alignItems: "center",
         backgroundColor: "#1e1e2d",
-        borderRadius: 16,
-        padding: 12,
-        margin: 8,
+        borderRadius: 10,
+        marginVertical: 1.5,
+        marginHorizontal: 0,
+        padding: 8,
         shadowColor: "#000",
         shadowOpacity: 0.3,
         shadowRadius: 6,
-        width: "95%",
       }}
     >
-      <Image source={{ uri: icon }} style={{ width: 64, height: 64, borderRadius: 8 }} />
-      <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600", marginTop: 8 }}>
-        {title}
-      </Text>
+      {/* Left: Game Icon */}
       <View
         style={{
-          height: 6,
-          backgroundColor: "#333",
-          borderRadius: 3,
-          marginVertical: 8,
+          width: 72,
+          height: 72,
+          borderRadius: 6,
+          overflow: "hidden",
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#2a2a3d",
+          marginRight: 12,
         }}
       >
-        <View
+        <Image
+          source={{ uri: icon }}
           style={{
-            width: `${progress}%`,
-            backgroundColor: "#4caf50",
+            width: "100%",
             height: "100%",
-            borderRadius: 3,
+            resizeMode: "contain", // keeps proper aspect ratio
           }}
         />
       </View>
-      <Text style={{ color: "#aaa" }}>
-        🏆 {counts.total} | 🥇 {counts.gold} 🥈 {counts.silver} 🥉 {counts.bronze} 💎{" "}
-        {counts.platinum}
-      </Text>
+
+      {/* Right: Game Info */}
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            color: "#fff",
+            fontSize: 16,
+            fontWeight: "600",
+            marginBottom: 6,
+          }}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
+
+        <View
+          style={{
+            height: 6,
+            backgroundColor: "#333",
+            borderRadius: 3,
+            marginBottom: 6,
+          }}
+        >
+          <View
+            style={{
+              width: `${progress}%`,
+              backgroundColor: "#4caf50",
+              height: "100%",
+              borderRadius: 3,
+            }}
+          />
+        </View>
+
+        <Text style={{ color: "#aaa", fontSize: 13 }}>
+          🏆 {counts.total} | 🥇 {counts.gold} 🥈 {counts.silver} 🥉 {counts.bronze} 💎{" "}
+          {counts.platinum}
+        </Text>
+      </View>
     </View>
   );
 }

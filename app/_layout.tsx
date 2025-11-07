@@ -12,6 +12,7 @@ export default function Layout() {
           screenOptions={{
             headerShown: false,
             drawerStyle: { backgroundColor: "#0b0e13", width: 270 },
+            
           }}
           drawerContent={(props) => <SideMenu {...props} />}
         />

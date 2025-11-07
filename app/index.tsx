@@ -116,9 +116,10 @@ React.useEffect(() => {
         justifyContent: "flex-start",
         backgroundColor: "#000",
         paddingVertical: 40,
+        
       }}
     >
-      <View style={{ alignSelf: "flex-start", marginLeft: 20, marginBottom: 10 }}>
+      <View style={{ alignSelf: "flex-start", marginLeft: 10, marginBottom: 10 }}>
         <DrawerToggleButton tintColor="#fff" />
       </View>
 
@@ -128,7 +129,7 @@ React.useEffect(() => {
 
       {/* ✅ Trophy summary */}
       {trophies && trophies.trophyTitles ? (
-        <View style={{ marginTop: 30, alignItems: "flex-start", width: "90%" }}>
+        <View style={{ marginTop: 20, alignItems: "flex-start", width: "100%" }}>
           <Text style={{ color: "gold", fontSize: 18, fontWeight: "bold" }}>
             Trophy Summary
           </Text>
@@ -136,8 +137,8 @@ React.useEffect(() => {
           <Text style={{ color: "white", marginTop: 8 }}>
             Total Titles: {trophies?.totalItemCount ?? "?"}
           </Text>
-<View style={{ marginTop: 20, width: "95%", alignItems: "center" }}></View>
-          {trophies.trophyTitles.slice(0, 5).map((game: any, i: number) => (
+<View style={{ marginTop: 20, width: "100%", alignItems: "center" }}></View>
+          {trophies.trophyTitles.map((game: any, i: number) => (
   <TrophyCard
     key={i}
     title={game.trophyTitleName}

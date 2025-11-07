@@ -19,6 +19,7 @@ export default function App() {
             headerShown: false,
             drawerStyle: { backgroundColor: "#0b0e13" },
             drawerInactiveTintColor: "#fff",
+            
           }}
         >
           <Drawer.Screen name="index" component={HomeScreen} />

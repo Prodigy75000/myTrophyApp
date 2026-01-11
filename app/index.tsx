@@ -2,8 +2,8 @@ import { DrawerToggleButton } from "@react-navigation/drawer";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import WebView from "react-native-webview";
-import TrophyCard from "../components/TrophyCard";
-import { useTrophy } from "../TrophyContext";
+import TrophyCard from "../components/trophies/TrophyCard";
+import { useTrophy } from "../providers/TrophyContext";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 export default function HomeScreen() {
   const [showWebView, setShowWebView] = useState(false);
@@ -13,12 +13,12 @@ export default function HomeScreen() {
   const [accountId, setAccountId] = useState<string | null>(null);
   // ✅ Use shared context
   const { trophies, setTrophies } = useTrophy();
-const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-// whenever trophies updates in context, force re-render
-React.useEffect(() => {
-  if (trophies) setRefreshKey((k) => k + 1);
-}, [trophies]);
+  // whenever trophies updates in context, force re-render
+  React.useEffect(() => {
+    if (trophies) setRefreshKey((k) => k + 1);
+  }, [trophies]);
   const PROXY_BASE_URL = "http://192.168.1.151:4000";
 
   const handlePSNLogin = async () => {
@@ -52,7 +52,10 @@ React.useEffect(() => {
       const trophiesData = await trophiesRes.json();
       console.log("🏆 Trophy data:", trophiesData);
 
-      if (trophiesRes.status === 401 || trophiesData?.error?.includes("Invalid")) {
+      if (
+        trophiesRes.status === 401 ||
+        trophiesData?.error?.includes("Invalid")
+      ) {
         console.warn("⚠️ Token expired or invalid — retrying login...");
         Alert.alert("Session expired", "Refreshing your login, please wait...");
         await handlePSNLogin();
@@ -60,7 +63,9 @@ React.useEffect(() => {
       }
 
       if (trophiesData?.error) {
-        throw new Error(trophiesData.error.message || JSON.stringify(trophiesData));
+        throw new Error(
+          trophiesData.error.message || JSON.stringify(trophiesData)
+        );
       }
 
       // ✅ Correct structure assignment
@@ -68,10 +73,10 @@ React.useEffect(() => {
       if (trophiesData.trophyTitles) {
         console.log("✅ Setting trophies (has trophyTitles)");
         setTrophies({
-  trophyTitles: [...trophiesData.trophyTitles],
-  totalItemCount: trophiesData.totalItemCount,
-  nextOffset: trophiesData.nextOffset,
-});
+          trophyTitles: [...trophiesData.trophyTitles],
+          totalItemCount: trophiesData.totalItemCount,
+          nextOffset: trophiesData.nextOffset,
+        });
       } else {
         console.log("⚠️ trophiesData missing trophyTitles");
         setTrophies(trophiesData);
@@ -109,7 +114,7 @@ React.useEffect(() => {
 
   return (
     <ScrollView
-    key={refreshKey}
+      key={refreshKey}
       contentContainerStyle={{
         flexGrow: 1,
         alignItems: "center",
@@ -118,7 +123,9 @@ React.useEffect(() => {
         paddingVertical: 40,
       }}
     >
-      <View style={{ alignSelf: "flex-start", marginLeft: 20, marginBottom: 10 }}>
+      <View
+        style={{ alignSelf: "flex-start", marginLeft: 20, marginBottom: 10 }}
+      >
         <DrawerToggleButton tintColor="#fff" />
       </View>
 
@@ -128,7 +135,9 @@ React.useEffect(() => {
 
       {/* ✅ Trophy summary */}
       {trophies && trophies.trophyTitles ? (
-        <View style={{ marginTop: 30, alignItems: "flex-start", width: "90%" }}>
+        <View
+          style={{ marginTop: 30, alignItems: "flex-start", width: "100%" }}
+        >
           <Text style={{ color: "gold", fontSize: 18, fontWeight: "bold" }}>
             Trophy Summary
           </Text>
@@ -136,29 +145,39 @@ React.useEffect(() => {
           <Text style={{ color: "white", marginTop: 8 }}>
             Total Titles: {trophies?.totalItemCount ?? "?"}
           </Text>
-<View style={{ marginTop: 20, width: "95%", alignItems: "center" }}></View>
-          {trophies.trophyTitles.slice(0, 5).map((game: any, i: number) => (
-  <TrophyCard
-    key={i}
-    title={game.trophyTitleName}
-    icon={game.trophyTitleIconUrl}
-    progress={game.progress}
-    counts={{
-      total:
-        game.definedTrophies.bronze +
-        game.definedTrophies.silver +
-        game.definedTrophies.gold +
-        game.definedTrophies.platinum,
-      bronze: game.definedTrophies.bronze,
-      silver: game.definedTrophies.silver,
-      gold: game.definedTrophies.gold,
-      platinum: game.definedTrophies.platinum,
-    }}
-  />
-))}
+          <View
+            style={{ marginTop: 4, width: "95%", alignItems: "center" }}
+          ></View>
+          {trophies.trophyTitles.map((game: any, i: number) => (
+            <TrophyCard
+              key={i}
+              id={game.npCommunicationId}
+              title={game.trophyTitleName}
+              icon={game.trophyTitleIconUrl}
+              progress={game.progress}
+              lastPlayed={game.lastUpdatedDateTime}
+              counts={{
+                total:
+                  game.definedTrophies.bronze +
+                  game.definedTrophies.silver +
+                  game.definedTrophies.gold +
+                  game.definedTrophies.platinum,
+                bronze: game.definedTrophies.bronze,
+                silver: game.definedTrophies.silver,
+                gold: game.definedTrophies.gold,
+                platinum: game.definedTrophies.platinum,
+                earnedBronze: game.earnedTrophies.bronze,
+                earnedSilver: game.earnedTrophies.silver,
+                earnedGold: game.earnedTrophies.gold,
+                earnedPlatinum: game.earnedTrophies.platinum,
+              }}
+            />
+          ))}
         </View>
       ) : (
-        <Text style={{ color: "red", marginTop: 20 }}>⚠️ No trophy data yet.</Text>
+        <Text style={{ color: "red", marginTop: 20 }}>
+          ⚠️ No trophy data yet.
+        </Text>
       )}
     </ScrollView>
   );

@@ -1,25 +1,32 @@
-import { DrawerContentComponentProps } from "@react-navigation/drawer";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { useTrophy } from "../TrophyContext";
+import {
+  Alert,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useTrophy } from "../providers/TrophyContext";
 
-export default function SideMenu(props: DrawerContentComponentProps) {
-  const { navigation } = props;
+export default function SideMenu() {
+  const router = useRouter();
+
   const [psnConnected, setPsnConnected] = useState(false);
   const [steamConnected, setSteamConnected] = useState(false);
   const [xboxConnected, setXboxConnected] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loading, setLoading] = useState(false);
 
   const { user, setTrophies, setUser } = useTrophy();
-  const PROXY_BASE_URL = "http://192.168.1.151:4000";
+  const PROXY_BASE_URL = "http://192.168.1.190:4000";
 
   const handlePSNLogin = async () => {
     try {
       setLoading(true);
       console.log("🔑 Connecting to PSN...");
 
-      // 1️⃣ Login to get tokens
+      // 1️⃣ Login
       const loginRes = await fetch(`${PROXY_BASE_URL}/api/login`);
       const loginData = await loginRes.json();
       if (!loginData.accessToken) throw new Error("No access token received");
@@ -43,12 +50,9 @@ export default function SideMenu(props: DrawerContentComponentProps) {
           nextOffset: trophiesData.nextOffset,
         });
         setPsnConnected(true);
-        console.log("✅ PSN trophies stored in context");
-      } else {
-        console.warn("⚠️ Missing trophyTitles", trophiesData);
       }
 
-      // 3️⃣ 🧩 Fetch user profile (avatar, name, level)
+      // 3️⃣ Fetch profile
       const profileRes = await fetch(
         `${PROXY_BASE_URL}/api/profile/${loginData.accountId}`,
         {
@@ -56,7 +60,6 @@ export default function SideMenu(props: DrawerContentComponentProps) {
         }
       );
       const profileData = await profileRes.json();
-      console.log("👤 PSN Profile:", profileData);
 
       if (profileData?.profile) {
         setUser({
@@ -67,31 +70,34 @@ export default function SideMenu(props: DrawerContentComponentProps) {
         });
       }
     } catch (e: any) {
-      console.error("❌ PSN login failed", e);
       Alert.alert("Login failed", e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 🎨 Display
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#0b0e13", padding: 16 }}>
       <View style={{ alignItems: "center", marginBottom: 20 }}>
-        {/* Show avatar if available */}
-        {psnConnected ? (
+        {psnConnected && user ? (
           <>
-            {/* Profile avatar */}
-            {/* Uncomment this once context user is working */}
-            {/* <Image
-              source={{ uri: user?.avatarUrl }}
-              style={{ width: 80, height: 80, borderRadius: 40, marginBottom: 6 }}
-            /> */}
-            <Text style={{ color: "#fff", fontSize: 20 }}>
-              {user?.onlineId || "PSN User"}
-            </Text>
+            {/* Show avatar */}
+            {user.avatarUrl && (
+              <Image
+                source={{ uri: user.avatarUrl }}
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  marginBottom: 6,
+                }}
+              />
+            )}
+
+            <Text style={{ color: "#fff", fontSize: 20 }}>{user.onlineId}</Text>
+
             <Text style={{ color: "#888" }}>
-              Level {user?.trophyLevel ?? "?"} ({user?.progress ?? 0}%)
+              Level {user.trophyLevel} ({user.progress}%)
             </Text>
           </>
         ) : (
@@ -102,13 +108,13 @@ export default function SideMenu(props: DrawerContentComponentProps) {
         )}
       </View>
 
-      {/* PlayStation button */}
+      {/* PSN Login */}
       <TouchableOpacity
         style={{
           backgroundColor: "#003791",
           paddingVertical: 10,
           borderRadius: 6,
-          marginBottom: 8,
+          marginBottom: 12,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
@@ -125,12 +131,16 @@ export default function SideMenu(props: DrawerContentComponentProps) {
       </TouchableOpacity>
 
       {/* Navigation */}
-      <TouchableOpacity onPress={() => navigation.navigate("index")}>
-        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🏠 Home</Text>
+      <TouchableOpacity onPress={() => router.navigate("/")}>
+        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>
+          🏠 Home
+        </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate("library")}>
-        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🎮 Library</Text>
+      <TouchableOpacity onPress={() => router.navigate("/library")}>
+        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>
+          🎮 Library
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );

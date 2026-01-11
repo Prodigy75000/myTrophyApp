@@ -73,7 +73,10 @@ app.get("/api/login", async (req, res) => {
     console.error("❌ Login error:", err.message);
     res
       .status(500)
-      .json({ error: "Failed to retrieve PSN access token", details: err.message });
+      .json({
+        error: "Failed to retrieve PSN access token",
+        details: err.message,
+      });
   }
 });
 
@@ -81,7 +84,10 @@ app.get("/api/login", async (req, res) => {
 app.get("/api/profile/:username", async (req, res) => {
   try {
     const accessToken = await getAccessToken();
-    const profile = await getProfileFromUserName(accessToken, req.params.username);
+    const profile = await getProfileFromUserName(
+      accessToken,
+      req.params.username
+    );
     res.json(profile);
   } catch (err) {
     console.error(err);
@@ -122,7 +128,10 @@ app.get("/api/trophies/:accountId", async (req, res) => {
       if (psnRes.status === 0 && /ENOTFOUND/i.test(errorText)) {
         return res
           .status(503)
-          .json({ error: "DNS lookup failed for Sony API", details: errorText });
+          .json({
+            error: "DNS lookup failed for Sony API",
+            details: errorText,
+          });
       }
       if (psnRes.status === 401) {
         return res.status(401).json({ error: "Invalid or expired token" });
@@ -139,6 +148,33 @@ app.get("/api/trophies/:accountId", async (req, res) => {
   } catch (err) {
     console.error("❌ /api/trophies error:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+//               TROPHY LIST ----------------
+app.get("/api/trophylist/:npCommId", async (req, res) => {
+  try {
+    const { npCommId } = req.params;
+    const accessToken = req.headers.authorization?.replace("Bearer ", "");
+
+    if (!accessToken) {
+      return res.status(400).json({ error: "Missing access token" });
+    }
+
+    const apiUrl = `https://m.np.playstation.net/api/trophy/v1/npCommunicationIds/${npCommId}/trophies`;
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Accept-Language": "en-US",
+      },
+    });
+
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching trophy list:", err);
+    res.status(500).json({ error: "Failed to fetch trophy list" });
   }
 });
 

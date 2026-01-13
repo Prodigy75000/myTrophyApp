@@ -3,5 +3,28 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "editor.formatOnSave": false,
+  "editor.autoSurround": "never",
+  "editor.autoClosingBrackets": "always",
+  "editor.autoClosingQuotes": "always",
+  "editor.quickSuggestions": {
+    "other": false,
+    "comments": false,
+    "strings": false
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.expo": true,
+    "**/android": true,
+    "**/ios": true,
+    "**/expo-env.d.ts": true,
+    "**/package-lock.json": true,
+    "**/eslint.config.js": true
+
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.expo": true
   }
 }

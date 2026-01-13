@@ -2,6 +2,15 @@ import { useRouter } from "expo-router";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import ProgressCircle from "../ProgressCircle";
 
+
+// Trophy icons (adjust the path depending on your folder depth)
+const trophyIcons = {
+  bronze: require("../../assets/icons/trophies/bronze.png"),
+  silver: require("../../assets/icons/trophies/silver.png"),
+  gold: require("../../assets/icons/trophies/gold.png"),
+  platinum: require("../../assets/icons/trophies/platinum.png"),
+};
+
 const formatDate = (iso?: string) => {
   if (!iso) return "N/A";
 
@@ -21,7 +30,7 @@ const formatDate = (iso?: string) => {
   return `${formattedDate} • ${formattedTime}`;
 };
 
-type TrophyCardProps = {
+type GameCardProps = {
   id: string;
   title: string;
   icon: string;
@@ -40,14 +49,14 @@ type TrophyCardProps = {
   };
 };
 
-export default function TrophyCard({
+export default function GameCard({
   id,
   title,
   icon,
   progress,
   lastPlayed,
   counts,
-}: TrophyCardProps) {
+}: GameCardProps) {
   const router = useRouter();
 
   return (
@@ -56,10 +65,9 @@ export default function TrophyCard({
       onPress={() =>
         router.push({
           pathname: "/game/[id]",
-          params: { id }, // now using NPWRxxxxxx_00
+          params: { id },
         })
       }
-      // TEMPORARY: we will replace `title` with the real ID later
     >
       <View
         style={{
@@ -81,14 +89,16 @@ export default function TrophyCard({
           style={{
             width: 110,
             height: 110,
+            aspectRatio: 1,
             borderRadius: 8,
             marginRight: 12,
           }}
+          resizeMode="contain"
         />
 
-        {/* MIDDLE COLUMN (title at top, trophies & bar centered) */}
+        {/* RIGHT SIDE CONTENT */}
         <View style={{ flex: 1, flexDirection: "column" }}>
-          {/* TOP: Title anchored at the top */}
+          {/* TOP: Title */}
           <View>
             <Text
               numberOfLines={1}
@@ -104,7 +114,7 @@ export default function TrophyCard({
             </Text>
           </View>
 
-          {/* CENTER: trophies + progress bar */}
+          {/* TROPHIES + PROGRESS */}
           <View style={{ flex: 1, justifyContent: "center" }}>
             <View
               style={{
@@ -116,7 +126,12 @@ export default function TrophyCard({
             >
               {/* Bronze */}
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 18 }}>🥉</Text>
+                <Image
+                  // Trophy icon
+                  source={trophyIcons.bronze}
+                  style={{ width: 26, height: 26, marginBottom: 2 }}
+                  resizeMode="contain"
+                />
                 <Text style={{ color: "#aaa", fontSize: 11 }}>
                   {counts.earnedBronze}/{counts.bronze}
                 </Text>
@@ -124,7 +139,11 @@ export default function TrophyCard({
 
               {/* Silver */}
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 18 }}>🥈</Text>
+                <Image
+                  source={trophyIcons.silver}
+                  style={{ width: 26, height: 26, marginBottom: 2 }}
+                  resizeMode="contain"
+                />
                 <Text style={{ color: "#aaa", fontSize: 11 }}>
                   {counts.earnedSilver}/{counts.silver}
                 </Text>
@@ -132,7 +151,11 @@ export default function TrophyCard({
 
               {/* Gold */}
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 18 }}>🥇</Text>
+                <Image
+                  source={trophyIcons.gold}
+                  style={{ width: 26, height: 26, marginBottom: 2 }}
+                  resizeMode="contain"
+                />
                 <Text style={{ color: "#aaa", fontSize: 11 }}>
                   {counts.earnedGold}/{counts.gold}
                 </Text>
@@ -140,18 +163,23 @@ export default function TrophyCard({
 
               {/* Platinum */}
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 18 }}>💎</Text>
+                <Image
+                  source={trophyIcons.platinum}
+                  style={{ width: 35, height: 35, marginBottom: 2 }}
+                  resizeMode="contain"
+                />
                 <Text style={{ color: "#aaa", fontSize: 11 }}>
                   {counts.earnedPlatinum}/{counts.platinum}
                 </Text>
               </View>
 
-              {/* Right-anchored progress circle */}
+              {/* PROGRESS CIRCLE (right anchored) */}
               <View style={{ marginLeft: "auto", marginRight: 4 }}>
                 <ProgressCircle progress={progress} />
               </View>
             </View>
 
+            {/* Last Played */}
             <Text
               style={{
                 marginTop: 6,

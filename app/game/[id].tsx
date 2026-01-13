@@ -1,139 +1,104 @@
 import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
+import TrophyItemCard from "../../components/trophies/TrophyItemCard";
+import { PROXY_BASE_URL } from "../../config/endpoints";
 import { useTrophy } from "../../providers/TrophyContext";
 
 export default function GameScreen() {
-  const { id } = useLocalSearchParams(); // dynamic route param
-  const { trophies } = useTrophy();
+  const params = useLocalSearchParams();
+  const { trophies, accessToken, accountId } = useTrophy();
 
-  // Find the selected game using npCommunicationId
+  const [gameTrophies, setGameTrophies] = useState<any[]>([]);
+  const [loadingTrophies, setLoadingTrophies] = useState(false);
+
+  const rawId = params.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const game = trophies?.trophyTitles?.find(
-    (g: any) => g.npCommunicationId === id
+    (g: any) => String(g.npCommunicationId) === String(id)
   );
+
+  // ✅ HOOKS ALWAYS RUN — NO RETURNS ABOVE
+  useEffect(() => {
+    if (!accountId || !accessToken || !game) return;
+    console.log("🚀 FETCH EFFECT RUNNING");
+    setLoadingTrophies(true);
+/**
+ * Fetch per-game trophy details.
+ * NOTE: Kept local to this screen (route-specific data).
+ * May move to a dedicated data layer later if reused.
+ */
+    fetch(
+      `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        console.log("✅ GAME TROPHIES RESPONSE", data);
+        setGameTrophies(data.trophies ?? []);
+      })
+      .catch((e) => console.log("❌ FETCH FAILED", e))
+      .finally(() => setLoadingTrophies(false));
+  }, [accountId, accessToken, trophies, game]);
+
+  // ⛔ EARLY RETURNS ONLY AFTER HOOKS
+  if (!id) {
+    return (
+      <View>
+        <Text>Missing game id</Text>
+      </View>
+    );
+  }
 
   if (!game) {
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: "#000",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Text style={{ color: "white" }}>Game not found.</Text>
+      <View>
+        <Text>Game not found</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: "#000" }}
-      contentContainerStyle={{ padding: 16 }}
-    >
-      {/* Game Cover */}
+    <ScrollView style={{ flex: 1, backgroundColor: "#000" }} contentContainerStyle={{ padding: 16 }}>
       <Image
         source={{ uri: game.trophyTitleIconUrl }}
-        style={{
-          width: 180,
-          height: 180,
-          borderRadius: 12,
-          alignSelf: "center",
-          marginBottom: 16,
-        }}
+        style={{ width: 180, height: 180, borderRadius: 12, alignSelf: "center", marginBottom: 16 }}
       />
 
-      {/* Game Title */}
-      <Text
-        style={{
-          color: "white",
-          fontSize: 22,
-          fontWeight: "bold",
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ color: "white", fontSize: 22, fontWeight: "bold", textAlign: "center" }}>
         {game.trophyTitleName}
       </Text>
 
-      {/* Progress Summary */}
-      <Text
-        style={{
-          color: "gold",
-          fontSize: 16,
-          textAlign: "center",
-          marginTop: 8,
-          marginBottom: 24,
-        }}
-      >
+      <Text style={{ color: "gold", textAlign: "center", marginBottom: 24 }}>
         {game.progress}% Complete
       </Text>
 
-      {/* Trophy List Header */}
-      <Text
-        style={{
-          color: "white",
-          fontSize: 18,
-          fontWeight: "bold",
-          marginBottom: 12,
-        }}
-      >
+      <Text style={{ color: "white", fontSize: 18, fontWeight: "bold", marginBottom: 12 }}>
         Trophy List
       </Text>
 
-      {/* Trophy List Items */}
-      {game.trophies?.map((trophy: any, i: number) => (
-        <View
-          key={i}
-          style={{
-            backgroundColor: "#1c1c26",
-            padding: 12,
-            marginBottom: 10,
-            borderRadius: 8,
-            flexDirection: "row",
-            alignItems: "center",
-          }}
-        >
-          {/* Trophy Icon */}
-          <Image
-            source={{ uri: trophy.trophyIconUrl }}
-            style={{
-              width: 50,
-              height: 50,
-              marginRight: 12,
-              borderRadius: 6,
-            }}
-          />
+      {loadingTrophies && <Text style={{ color: "#999" }}>Loading trophies…</Text>}
 
-          {/* Trophy Info */}
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: "white", fontSize: 14, fontWeight: "600" }}>
-              {trophy.trophyName}
-            </Text>
-            <Text style={{ color: "#ccc", fontSize: 12 }}>
-              {trophy.trophyDetail}
-            </Text>
+      {!loadingTrophies && gameTrophies.length === 0 && (
+        <Text style={{ color: "#999" }}>No trophies found.</Text>
+      )}
 
-            <Text
-              style={{
-                color: trophy.earned ? "#4caf50" : "#999",
-                marginTop: 4,
-                fontSize: 12,
-              }}
-            >
-              {trophy.earned
-                ? `Earned on ${trophy.earnedDateTime}`
-                : "Not earned"}
-            </Text>
-          </View>
-
-          {/* Trophy Type */}
-          <Text style={{ color: "white", marginLeft: 10 }}>
-            {trophy.trophyType === "bronze" && "🥉"}
-            {trophy.trophyType === "silver" && "🥈"}
-            {trophy.trophyType === "gold" && "🥇"}
-            {trophy.trophyType === "platinum" && "💎"}
-          </Text>
-        </View>
+      {gameTrophies.map((trophy: any) => (
+        <TrophyItemCard
+          key={trophy.trophyId}
+          id={trophy.trophyId}
+          name={trophy.trophyName}
+          description={trophy.trophyDetail}
+          icon={trophy.trophyIconUrl}
+          type={trophy.trophyType}
+          earned={!!trophy.earned}
+          earnedAt={trophy.earnedDateTime}
+        />
       ))}
     </ScrollView>
   );

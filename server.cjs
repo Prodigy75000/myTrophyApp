@@ -34,13 +34,6 @@ async function getAccessToken() {
   };
   return accessCache.token;
 }
-
-// ----- TEST ROUTE ----
-app.get("/ping", (req, res) => {
-  console.log("🏓 PING HIT");
-  res.send("pong");
-});
-
 // ---------------- LOGIN ----------------
 app.get("/api/login", async (req, res) => {
   try {
@@ -105,8 +98,12 @@ app.get("/api/profile/:username", async (req, res) => {
       }
 
       const accessToken = authHeader.split(" ")[1];
-      const { accountId } = req.params;
+      const { accountId, npCommunicationId } = req.params;
 
+console.log("[GAME TROPHIES]", {
+  accountId,
+  npCommunicationId,
+});
       const baseUrl =
         `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/trophyTitles`;
 
@@ -176,26 +173,49 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       const t = await r.text();
       return res.status(r.status).json({ error: t });
     }
+// progress definitions
+   const progressJson = await r.json();
+const progress = progressJson.trophies ?? [];
+console.log("[TROPHY PROGRESS]", {
+  npCommunicationId,
+  count: progress.length,
+});
+// fetch definitions
+const defUrl =
+  `https://m.np.playstation.com/api/trophy/v1` +
+  `/npCommunicationIds/${npCommunicationId}` +
+  `/trophyGroups/all/trophies`;
 
-    const json = await r.json();
+const defRes = await fetch(defUrl, {
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
+    "Accept-Language": "en-US",
+  },
+});
 
-    // IMPORTANT: normalize for frontend
-    res.json({
-      trophies: json.trophies ?? [],
-    });
+const defJson = await defRes.json();
+const definitions = defJson.trophies ?? [];
+
+// merge BUT KEEP PSN FIELD NAMES
+const merged = definitions.map(def => {
+  const user = progress.find(p => p.trophyId === def.trophyId);
+
+  return {
+    ...def,
+    earned: user?.earned ?? false,
+    earnedDateTime: user?.earnedDateTime ?? undefined,
+  };
+});
+if (merged.length === 0) {
+  console.warn("[NO TROPHIES MERGED]", {
+    npCommunicationId,
+  });
+}
+return res.json({ trophies: merged });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
-  }
-});
-// ---------------- MISC TEST ----------------
-app.get("/api/test-npsso", async (req, res) => {
-  try {
-    const code = await exchangeNpssoForCode(process.env.PSN_NPSSO);
-    res.json({ status: "valid", code });
-  } catch (err) {
-    res.status(400).json({ status: "invalid", message: err.message });
   }
 });
 

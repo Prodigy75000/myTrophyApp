@@ -48,22 +48,17 @@ export default function SideMenu() {
 
       {/* PSN Login */}
       <TouchableOpacity
-  style={{
-    backgroundColor: "#003791",
-    paddingVertical: 10,
-    borderRadius: 6,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  onPress={async () => {
+    const result = await handlePSNBootstrap({
+      setAccessToken,
+      setAccountId,
+      setTrophies,
+    });
+
+    if (result.success) {
+      navigation.closeDrawer();
+    }
   }}
-  onPress={() =>
-  handlePSNBootstrap({
-    setAccessToken,
-    setAccountId,
-    setTrophies,
-  })
-}
 >
   <Text style={{ color: "#fff", fontWeight: "bold", marginRight: 8 }}>
     {user ? "Refresh PSN Data" : "Sign in with"}

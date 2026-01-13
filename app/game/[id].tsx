@@ -90,14 +90,14 @@ export default function GameScreen() {
 
       {gameTrophies.map((trophy: any) => (
         <TrophyItemCard
-          key={trophy.trophyId}
+          key={String(trophy.trophyId)}
           id={trophy.trophyId}
           name={trophy.trophyName}
           description={trophy.trophyDetail}
           icon={trophy.trophyIconUrl}
           type={trophy.trophyType}
           earned={!!trophy.earned}
-          earnedAt={trophy.earnedDateTime}
+          earnedAt={trophy.earnedDateTime ?? undefined}
         />
       ))}
     </ScrollView>

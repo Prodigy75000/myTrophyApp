@@ -2,7 +2,7 @@ import HeaderActionBar from "@/components/HeaderActionBar";
 import { resolveGameIcon } from "@/utils/resolveIcon";
 import { useNavigation } from "expo-router";
 import React, { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import GameCard from "../components/trophies/GameCard";
 import { useTrophy } from "../providers/TrophyContext";
@@ -19,6 +19,33 @@ export default function HomeScreen() {
   }, [searchText, trophies]);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+const renderGame = React.useCallback(
+  ({ item }: { item: any }) => (
+    <GameCard
+      id={item.npCommunicationId}
+      title={item.trophyTitleName}
+      icon={resolveGameIcon(item.trophyTitleIconUrl)}
+      progress={item.progress}
+      lastPlayed={item.lastUpdatedDateTime}
+      counts={{
+        total:
+          item.definedTrophies.bronze +
+          item.definedTrophies.silver +
+          item.definedTrophies.gold +
+          item.definedTrophies.platinum,
+        bronze: item.definedTrophies.bronze,
+        silver: item.definedTrophies.silver,
+        gold: item.definedTrophies.gold,
+        platinum: item.definedTrophies.platinum,
+        earnedBronze: item.earnedTrophies.bronze,
+        earnedSilver: item.earnedTrophies.silver,
+        earnedGold: item.earnedTrophies.gold,
+        earnedPlatinum: item.earnedTrophies.platinum,
+      }}
+    />
+  ),
+  []
+);
 
   // RENDER MAIN HOME SCREEN
   // with fixed header and scrollable content below
@@ -38,62 +65,34 @@ export default function HomeScreen() {
       />
 
       {/* 🔽 Scrollable content BELOW */}
-      <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          alignItems: "center",
-          justifyContent: "flex-start",
-          paddingVertical: 20,
-        }}
-      >
-        <Text style={{ fontSize: 24, color: "gold", marginBottom: 30 }}>
+     {trophies && trophies.trophyTitles ? (
+  <FlatList
+    data={filteredTrophies}
+    keyExtractor={(item) => item.npCommunicationId}
+    renderItem={renderGame}
+
+    initialNumToRender={10}
+    maxToRenderPerBatch={8}
+    windowSize={5}
+    removeClippedSubviews
+
+    ListHeaderComponent={
+      <View style={{ alignItems: "center", paddingVertical: 20 }}>
+        <Text style={{ fontSize: 24, color: "gold", marginBottom: 10 }}>
           🏆 Welcome to Trophy Hub
         </Text>
 
-        {trophies && trophies.trophyTitles ? (
-          <View
-            style={{ marginTop: 10, alignItems: "flex-start", width: "100%" }}
-          >
-            <Text style={{ color: "gold", fontSize: 18, fontWeight: "bold" }}>
-              Trophy Summary
-            </Text>
-
-            <Text style={{ color: "white", marginTop: 8 }}>
-              Total Titles: {filteredTrophies.length}
-            </Text>
-
-            {filteredTrophies.map((game: any, i: number) => (
-              <GameCard
-                key={i}
-                id={game.npCommunicationId}
-                title={game.trophyTitleName}
-                icon={resolveGameIcon(game.trophyTitleIconUrl)}
-                progress={game.progress}
-                lastPlayed={game.lastUpdatedDateTime}
-                counts={{
-                  total:
-                    game.definedTrophies.bronze +
-                    game.definedTrophies.silver +
-                    game.definedTrophies.gold +
-                    game.definedTrophies.platinum,
-                  bronze: game.definedTrophies.bronze,
-                  silver: game.definedTrophies.silver,
-                  gold: game.definedTrophies.gold,
-                  platinum: game.definedTrophies.platinum,
-                  earnedBronze: game.earnedTrophies.bronze,
-                  earnedSilver: game.earnedTrophies.silver,
-                  earnedGold: game.earnedTrophies.gold,
-                  earnedPlatinum: game.earnedTrophies.platinum,
-                }}
-              />
-            ))}
-          </View>
-        ) : (
-          <Text style={{ color: "red", marginTop: 20 }}>
-            ⚠️ No trophy data yet.
-          </Text>
-        )}
-      </ScrollView>
+        <Text style={{ color: "white" }}>
+          Total Titles: {filteredTrophies.length}
+        </Text>
+      </View>
+    }
+  />
+) : (
+  <Text style={{ color: "red", marginTop: 20 }}>
+    ⚠️ No trophy data yet.
+  </Text>
+)}
     </View>
   );
 }

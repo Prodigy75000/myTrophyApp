@@ -1,5 +1,7 @@
 import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
+import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
 
 
@@ -11,24 +13,6 @@ const trophyIcons = {
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
-const formatDate = (iso?: string) => {
-  if (!iso) return "N/A";
-
-  const date = new Date(iso);
-
-  const formattedDate = date.toLocaleDateString("fr-FR", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-
-  const formattedTime = date.toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  return `${formattedDate} • ${formattedTime}`;
-};
 
 type GameCardProps = {
   id: string;
@@ -49,15 +33,24 @@ type GameCardProps = {
   };
 };
 
-export default function GameCard({
+const GameCard = ({
   id,
   title,
   icon,
   progress,
   lastPlayed,
   counts,
-}: GameCardProps) {
+}: GameCardProps) => {
   const router = useRouter();
+  const [loadIcon, setLoadIcon] = useState(false);
+
+useEffect(() => {
+  const t = setTimeout(() => {
+    setLoadIcon(true);
+  }, 50); // spreads icon loading over time
+
+  return () => clearTimeout(t);
+}, []);
 
   return (
     <TouchableOpacity
@@ -84,17 +77,29 @@ export default function GameCard({
         }}
       >
         {/* LEFT — Game Image */}
-        <Image
-          source={{ uri: icon }}
-          style={{
-            width: 110,
-            height: 110,
-            aspectRatio: 1,
-            borderRadius: 8,
-            marginRight: 12,
-          }}
-          resizeMode="contain"
-        />
+        {loadIcon ? (
+  <Image
+    source={{ uri: icon }}
+    style={{
+      width: 110,
+      height: 110,
+      aspectRatio: 1,
+      borderRadius: 8,
+      marginRight: 12,
+    }}
+    resizeMode="contain"
+  />
+) : (
+  <View
+    style={{
+      width: 110,
+      height: 110,
+      borderRadius: 8,
+      marginRight: 12,
+      backgroundColor: "#2a2a3a",
+    }}
+  />
+)}
 
         {/* RIGHT SIDE CONTENT */}
         <View style={{ flex: 1, flexDirection: "column" }}>
@@ -193,5 +198,9 @@ export default function GameCard({
         </View>
       </View>
     </TouchableOpacity>
+    
   );
+
 }
+  export default React.memo(GameCard);
+

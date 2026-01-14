@@ -4,7 +4,6 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
 
-
 // Trophy icons (adjust the path depending on your folder depth)
 const trophyIcons = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
@@ -12,7 +11,6 @@ const trophyIcons = {
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
-
 
 type GameCardProps = {
   id: string;
@@ -33,24 +31,17 @@ type GameCardProps = {
   };
 };
 
-const GameCard = ({
-  id,
-  title,
-  icon,
-  progress,
-  lastPlayed,
-  counts,
-}: GameCardProps) => {
+const GameCard = ({ id, title, icon, progress, lastPlayed, counts }: GameCardProps) => {
   const router = useRouter();
   const [loadIcon, setLoadIcon] = useState(false);
 
-useEffect(() => {
-  const t = setTimeout(() => {
-    setLoadIcon(true);
-  }, 50); // spreads icon loading over time
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setLoadIcon(true);
+    }, 50); // spreads icon loading over time
 
-  return () => clearTimeout(t);
-}, []);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <TouchableOpacity
@@ -69,7 +60,7 @@ useEffect(() => {
           borderRadius: 8,
           paddingVertical: 4,
           paddingHorizontal: 0,
-          marginVertical: 2,
+          marginVertical: 1.5,
           shadowColor: "#000",
           shadowOpacity: 0.3,
           shadowRadius: 6,
@@ -78,28 +69,28 @@ useEffect(() => {
       >
         {/* LEFT — Game Image */}
         {loadIcon ? (
-  <Image
-    source={{ uri: icon }}
-    style={{
-      width: 110,
-      height: 110,
-      aspectRatio: 1,
-      borderRadius: 8,
-      marginRight: 12,
-    }}
-    resizeMode="contain"
-  />
-) : (
-  <View
-    style={{
-      width: 110,
-      height: 110,
-      borderRadius: 8,
-      marginRight: 12,
-      backgroundColor: "#2a2a3a",
-    }}
-  />
-)}
+          <Image
+            source={{ uri: icon }}
+            style={{
+              width: 110,
+              height: 110,
+              aspectRatio: 1,
+              borderRadius: 8,
+              marginRight: 12,
+            }}
+            resizeMode="contain"
+          />
+        ) : (
+          <View
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: 8,
+              marginRight: 12,
+              backgroundColor: "#2a2a3a",
+            }}
+          />
+        )}
 
         {/* RIGHT SIDE CONTENT */}
         <View style={{ flex: 1, flexDirection: "column" }}>
@@ -198,9 +189,6 @@ useEffect(() => {
         </View>
       </View>
     </TouchableOpacity>
-    
   );
-
-}
-  export default React.memo(GameCard);
-
+};
+export default React.memo(GameCard);

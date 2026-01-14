@@ -4,7 +4,7 @@
  * - TEMP: owns trophies fetching & silent refresh logic
  * - Future: fetch logic will move to a dedicated data layer
  */
-import React, { createContext, useContext, useEffect, useMemo, useState, } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type UserProfile = {
   onlineId: string;
@@ -49,58 +49,58 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile>(null);
-useEffect(() => {
-  if (!accessToken || !accountId) return;
+  useEffect(() => {
+    if (!accessToken || !accountId) return;
 
-  let cancelled = false;
-// NOTE: Using EXPO_PUBLIC_PROXY_BASE_URL directly here.
-// Will be unified with config/endpoints.ts after audit.
-  const fetchTrophies = async () => {
-    try {
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      const data = await res.json();
-      if (!cancelled) {
-        setTrophies(data);
-      }
-
-      // 🔁 ONE silent re-fetch to pick up full cache
-      setTimeout(async () => {
-        try {
-          const res2 = await fetch(
-            `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-            }
-          );
-          const data2 = await res2.json();
-          if (!cancelled) {
-            setTrophies(data2);
+    let cancelled = false;
+    // NOTE: Using EXPO_PUBLIC_PROXY_BASE_URL directly here.
+    // Will be unified with config/endpoints.ts after audit.
+    const fetchTrophies = async () => {
+      try {
+        const res = await fetch(
+          `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
           }
-        } catch {
-          // silent
+        );
+
+        const data = await res.json();
+        if (!cancelled) {
+          setTrophies(data);
         }
-      }, 1500);
-    } catch (err) {
-      console.log("❌ Trophy fetch failed", err);
-    }
-  };
 
-  fetchTrophies();
+        // 🔁 ONE silent re-fetch to pick up full cache
+        setTimeout(async () => {
+          try {
+            const res2 = await fetch(
+              `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+              }
+            );
+            const data2 = await res2.json();
+            if (!cancelled) {
+              setTrophies(data2);
+            }
+          } catch {
+            // silent
+          }
+        }, 1500);
+      } catch (err) {
+        console.log("❌ Trophy fetch failed", err);
+      }
+    };
 
-  return () => {
-    cancelled = true;
-  };
-}, [accessToken, accountId]);
+    fetchTrophies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, accountId]);
   const value = useMemo(
     () => ({
       trophies,
@@ -117,9 +117,7 @@ useEffect(() => {
 
   // console.log("🧩 Provider trophies updated:", trophies?.trophyTitles?.length);
 
-  return (
-    <TrophyContext.Provider value={value}>{children}</TrophyContext.Provider>
-  );
+  return <TrophyContext.Provider value={value}>{children}</TrophyContext.Provider>;
 };
 
 export const useTrophy = () => useContext(TrophyContext);

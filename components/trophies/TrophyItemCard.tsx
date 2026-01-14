@@ -9,15 +9,14 @@ type TrophyItemCardProps = {
   type: "bronze" | "silver" | "gold" | "platinum";
   earned: boolean;
   earnedAt?: string;
+  rarity?: number;
 };
-
-const typeDot = {
-  bronze: "#cd7f32",
-  silver: "#c0c0c0",
-  gold: "#ffd700",
-  platinum: "#00e5ff",
+const trophyTypeIcon = {
+  bronze: require("../../assets/icons/trophies/bronze.png"),
+  silver: require("../../assets/icons/trophies/silver.png"),
+  gold: require("../../assets/icons/trophies/gold.png"),
+  platinum: require("../../assets/icons/trophies/platinum.png"),
 };
-
 export default function TrophyItemCard({
   name,
   description,
@@ -25,52 +24,75 @@ export default function TrophyItemCard({
   type,
   earned,
   earnedAt,
+  rarity,
 }: TrophyItemCardProps) {
   return (
     <View
       style={{
         flexDirection: "row",
         backgroundColor: "#1c1c26",
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 10,
+        borderRadius: 10,
+        paddingVertical: 2,
+        paddingHorizontal: 0,
+        marginBottom: 3,
         opacity: earned ? 1 : 0.55,
       }}
     >
+      {/* ICON */}
       <Image
         source={{ uri: icon }}
-        style={{ width: 48, height: 48, marginRight: 12, borderRadius: 6 }}
+        style={{ width: 96, height: 96, marginRight: 14, borderRadius: 6 }}
       />
 
+      {/* CONTENT */}
       <View style={{ flex: 1 }}>
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "600" }}>
-          {name}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Image
+            source={trophyTypeIcon[type]}
+            style={{
+              width: 14,
+              height: 14,
+              marginRight: 6,
+              opacity: earned ? 1 : 0.6,
+            }}
+          />
 
-        <Text style={{ color: "#ccc", fontSize: 12, marginTop: 2 }}>
-          {description}
-        </Text>
+          <Text style={{ color: "white", fontSize: 14, fontWeight: "600" }}>{name}</Text>
+        </View>
 
-       <Text
-  style={{
-    color: earned ? "#4caf50" : "#888",
-    fontSize: 11,
-    marginTop: 6,
-  }}
->
-  {earned && earnedAt
-    ? `Earned on ${formatDate(earnedAt)}`
-    : "Not earned"}
-</Text>
+        <Text style={{ color: "#ccc", fontSize: 12, marginTop: 3 }}>{description}</Text>
+
+        {/* TAG LANE (reserved for master JSON tags) */}
+        <View style={{ height: 14, marginTop: 6 }} />
+
+        {earned && earnedAt && (
+          <Text style={{ color: "#4caf50", fontSize: 11 }}>
+            Earned on {formatDate(earnedAt)}
+          </Text>
+        )}
       </View>
 
+      {/* METADATA COLUMN (rarity pyramid later) */}
       <View
         style={{
-          width: 8,
-          borderRadius: 4,
-          backgroundColor: typeDot[type],
+          width: 44, // give text breathing room
+          alignItems: "flex-end",
+          justifyContent: "flex-end",
+          paddingRight: 6,
+          paddingBottom: 6,
         }}
-      />
+      >
+        {typeof rarity === "number" && (
+          <Text
+            style={{
+              fontSize: 11,
+              color: "#aaa",
+            }}
+          >
+            {`rarity ${rarity}%`}
+          </Text>
+        )}
+      </View>
     </View>
   );
 }

@@ -8,11 +8,7 @@ type Props = {
   progress: number; // 0–100
 };
 
-export default function ProgressCircle({
-  size = 34,
-  strokeWidth = 4,
-  progress,
-}: Props) {
+export default function ProgressCircle({ size = 34, strokeWidth = 4, progress }: Props) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -55,9 +51,7 @@ export default function ProgressCircle({
       </Svg>
 
       {/* Percentage text */}
-      <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>
-        {progress}%
-      </Text>
+      <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{progress}%</Text>
     </View>
   );
 }

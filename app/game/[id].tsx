@@ -22,21 +22,20 @@ export default function GameScreen() {
   // ✅ HOOKS ALWAYS RUN — NO RETURNS ABOVE
   useEffect(() => {
     if (!accountId || !accessToken || !game) return;
+    // 🔥 CLEAR PREVIOUS GAME TROPHIES IMMEDIATELY
+    setGameTrophies([]);
     console.log("🚀 FETCH EFFECT RUNNING");
     setLoadingTrophies(true);
-/**
- * Fetch per-game trophy details.
- * NOTE: Kept local to this screen (route-specific data).
- * May move to a dedicated data layer later if reused.
- */
-    fetch(
-      `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    )
+    /**
+     * Fetch per-game trophy details.
+     * NOTE: Kept local to this screen (route-specific data).
+     * May move to a dedicated data layer later if reused.
+     */
+    fetch(`${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
       .then((r) => r.json())
       .then((data) => {
         console.log("✅ GAME TROPHIES RESPONSE", data);
@@ -45,7 +44,53 @@ export default function GameScreen() {
       .catch((e) => console.log("❌ FETCH FAILED", e))
       .finally(() => setLoadingTrophies(false));
   }, [accountId, accessToken, trophies, game]);
+  // trophy skeleton
+  function TrophySkeleton() {
+    return (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: "#111",
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 10,
+        }}
+      >
+        {/* Icon skeleton */}
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 6,
+            backgroundColor: "#222",
+            marginRight: 12,
+          }}
+        />
 
+        {/* Text skeleton */}
+        <View style={{ flex: 1 }}>
+          <View
+            style={{
+              height: 12,
+              width: "70%",
+              backgroundColor: "#222",
+              borderRadius: 4,
+              marginBottom: 6,
+            }}
+          />
+          <View
+            style={{
+              height: 10,
+              width: "50%",
+              backgroundColor: "#222",
+              borderRadius: 4,
+            }}
+          />
+        </View>
+      </View>
+    );
+  }
   // ⛔ EARLY RETURNS ONLY AFTER HOOKS
   if (!id) {
     return (
@@ -64,13 +109,24 @@ export default function GameScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#000" }} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: "#000" }}
+      contentContainerStyle={{ padding: 0 }}
+    >
       <Image
         source={{ uri: game.trophyTitleIconUrl }}
-        style={{ width: 180, height: 180, borderRadius: 12, alignSelf: "center", marginBottom: 16 }}
+        style={{
+          width: 180,
+          height: 180,
+          borderRadius: 12,
+          alignSelf: "center",
+          marginBottom: 16,
+        }}
       />
 
-      <Text style={{ color: "white", fontSize: 22, fontWeight: "bold", textAlign: "center" }}>
+      <Text
+        style={{ color: "white", fontSize: 22, fontWeight: "bold", textAlign: "center" }}
+      >
         {game.trophyTitleName}
       </Text>
 
@@ -78,11 +134,8 @@ export default function GameScreen() {
         {game.progress}% Complete
       </Text>
 
-      <Text style={{ color: "white", fontSize: 18, fontWeight: "bold", marginBottom: 12 }}>
-        Trophy List
-      </Text>
-
-      {loadingTrophies && <Text style={{ color: "#999" }}>Loading trophies…</Text>}
+      {loadingTrophies &&
+        Array.from({ length: 7 }).map((_, i) => <TrophySkeleton key={i} />)}
 
       {!loadingTrophies && gameTrophies.length === 0 && (
         <Text style={{ color: "#999" }}>No trophies found.</Text>

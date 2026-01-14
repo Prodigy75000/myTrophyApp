@@ -139,7 +139,7 @@ app.get("/api/trophies/:accountId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// ---------------- GAME TROPHIES (Simplified Version) ----------------
+// ---------------- GAME TROPHIES (REPLACE ENTIRE BLOCK WITH THIS) ----------------
 app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
   console.log("🔥 GAME TROPHIES ROUTE HIT", req.params);
 
@@ -148,76 +148,92 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
     if (!authHeader?.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Missing token" });
     }
+
     const accessToken = authHeader.split(" ")[1];
     const { accountId, npCommunicationId } = req.params;
 
-    const headers = {
-      Authorization: `Bearer ${accessToken}`,
-      "Accept-Language": "en-US",
-      "User-Agent": "Mozilla/5.0",
+    // --- HELPER: RETRY LOGIC FOR PS3/PS4 ---
+    const fetchWithFallback = async (baseUrl) => {
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "Accept-Language": "en-US",
+        "User-Agent": "Mozilla/5.0",
+      };
+
+      // 1. Try Default (PS5 style)
+      console.log(`[Attempt 1] Fetching: ${baseUrl}`);
+      let response = await fetch(baseUrl, { headers });
+
+      // 2. If it fails with 404 (Resource not found), try LEGACY param
+      if (!response.ok && response.status === 404) {
+        console.log(
+          `[Legacy Retry] ⚠️ Default failed. Retrying with ?npServiceName=trophy`
+        );
+
+        // Append query param correctly
+        const separator = baseUrl.includes("?") ? "&" : "?";
+        const legacyUrl = `${baseUrl}${separator}npServiceName=trophy`;
+
+        response = await fetch(legacyUrl, { headers });
+      }
+
+      // If it STILL fails, throw the error
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`PSN API Error (${response.status}): ${text}`);
+      }
+
+      return response.json();
     };
 
-    // 1. ATTEMPT FETCH (Default PS5 Endpoint)
-    // We try to get the user's earned status first.
-    let progressUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
-    let response = await fetch(progressUrl, { headers });
+    // ----------------------------------------
 
-    // 2. CHECK FOR LEGACY GAME (PS3/PS4)
-    // If we get a 404, it means this game isn't on the PS5 server. We switch to legacy mode.
-    let isLegacy = false;
-    if (!response.ok && response.status === 404) {
-      console.log(
-        `[Legacy Detect] ${npCommunicationId} is a PS3/PS4 game. Switching service...`
-      );
-      isLegacy = true;
-      progressUrl += "?npServiceName=trophy"; // Add the required legacy param
-      response = await fetch(progressUrl, { headers });
-    }
+    // A. FETCH USER EARNED STATUS
+    const progressUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
 
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).json({ error: text });
-    }
-
-    const progressJson = await response.json();
-    const progress = progressJson.trophies ?? [];
-
-    // 3. FETCH STATIC DETAILS (Names, Icons)
-    // If it is legacy, we MUST fetch definitions separately because the user endpoint doesn't return them.
-    let definitions = [];
-
-    // For PS5 (non-legacy), the user endpoint often has the info, but we fetch definitions to be safe/consistent.
-    // For PS4 (legacy), we add the param.
-    const defBaseUrl = `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
-    const defUrl = isLegacy ? `${defBaseUrl}?npServiceName=trophy` : defBaseUrl;
-
+    let progressJson;
     try {
-      const defRes = await fetch(defUrl, { headers });
-      if (defRes.ok) {
-        const defJson = await defRes.json();
-        definitions = defJson.trophies ?? [];
-      }
+      progressJson = await fetchWithFallback(progressUrl);
     } catch (e) {
-      console.warn("Could not fetch definitions, showing raw progress only.");
+      console.error("❌ Error fetching progress:", e.message);
+      // Stop here if we can't get the user's progress
+      return res
+        .status(404)
+        .json({ error: "Game not found or user has no trophies for it." });
     }
 
-    // 4. MERGE
-    // Combine the static info (name/icon) with the user info (earned date)
+    const progress = progressJson.trophies ?? [];
+    console.log(`[TROPHY PROGRESS] Found ${progress.length} items`);
+
+    // B. FETCH STATIC DETAILS (Names, Icons)
+    const defUrl = `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
+
+    let defJson = { trophies: [] };
+    try {
+      defJson = await fetchWithFallback(defUrl);
+    } catch (e) {
+      console.warn("⚠️ Error fetching definitions (using fallback):", e.message);
+    }
+
+    const definitions = defJson.trophies ?? [];
+
+    // C. MERGE DATA
     const merged = definitions.map((def) => {
       const user = progress.find((p) => p.trophyId === def.trophyId);
       return {
         ...def,
         earned: user?.earned ?? false,
         earnedDateTime: user?.earnedDateTime ?? null,
+        trophyEarnedRate: def.trophyEarnedRate ?? def.trophyRare ?? "0",
       };
     });
 
-    // If merge failed (e.g. definitions empty), fallback to progress
+    // Fallback: if definitions failed, just send the raw progress data
     const finalData = merged.length > 0 ? merged : progress;
 
-    res.json({ trophies: finalData });
+    return res.json({ trophies: finalData });
   } catch (err) {
-    console.error(err);
+    console.error("🔥 SERVER ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });

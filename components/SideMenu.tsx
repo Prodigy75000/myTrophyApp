@@ -1,19 +1,13 @@
 import { useRouter } from "expo-router";
 import React from "react";
-import {
-  Image,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { handlePSNBootstrap } from "../api/handlePSNBootstrap";
 import { useTrophy } from "../providers/TrophyContext";
 
 export default function SideMenu() {
   const router = useRouter();
   const { user, setAccessToken, setAccountId, setTrophies } = useTrophy();
-  
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#0b0e13", padding: 16 }}>
       <View style={{ alignItems: "center", marginBottom: 20 }}>
@@ -47,39 +41,43 @@ export default function SideMenu() {
       </View>
 
       {/* PSN Login */}
-      <TouchableOpacity
-  onPress={async () => {
-    const result = await handlePSNBootstrap({
-      setAccessToken,
-      setAccountId,
-      setTrophies,
-    });
 
-    if (result.success) {
-      navigation.closeDrawer();
-    }
-  }}
->
-  <Text style={{ color: "#fff", fontWeight: "bold", marginRight: 8 }}>
-    {user ? "Refresh PSN Data" : "Sign in with"}
-  </Text>
-  <Image
-    source={require("../assets/logos/ps.png")}
-    style={{ width: 22, height: 22 }}
-  />
-</TouchableOpacity>
+      <TouchableOpacity
+        style={{
+          backgroundColor: "#003791",
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 6,
+          marginBottom: 12,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        onPress={async () => {
+          await handlePSNBootstrap({
+            setAccessToken,
+            setAccountId,
+            setTrophies,
+          });
+        }}
+      >
+        <Text style={{ color: "#fff", fontWeight: "bold", marginRight: 8 }}>
+          {user ? "Refresh PSN Data" : "Sign in with"}
+        </Text>
+
+        <Image
+          source={require("../assets/logos/ps.png")}
+          style={{ width: 22, height: 22 }}
+        />
+      </TouchableOpacity>
 
       {/* Navigation */}
       <TouchableOpacity onPress={() => router.navigate("/")}>
-        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>
-          🏠 Home
-        </Text>
+        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🏠 Home</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => router.navigate("/library")}>
-        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>
-          🎮 Library
-        </Text>
+        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🎮 Library</Text>
       </TouchableOpacity>
     </ScrollView>
   );

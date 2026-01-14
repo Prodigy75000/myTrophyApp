@@ -17,8 +17,8 @@
  * - Will eventually be replaced by a proper Auth / Session manager
  */
 
-import { Alert } from 'react-native';
-import { PROXY_BASE_URL } from '../config/endpoints';
+import { Alert } from "react-native";
+import { PROXY_BASE_URL } from "../config/endpoints";
 
 /**
  * Dependencies injected from React state
@@ -46,11 +46,11 @@ export async function handlePSNBootstrap({
     // --------------------------------------------------
     // STEP 1 — Backend login
     // --------------------------------------------------
-    console.log('[PSN bootstrap] Connecting to backend');
+    console.log("[PSN bootstrap] Connecting to backend");
 
     const loginRes = await fetch(`${PROXY_BASE_URL}/api/login`);
 
-    console.log('🔎 login status:', loginRes.status);
+    console.log("🔎 login status:", loginRes.status);
 
     if (!loginRes.ok) {
       const text = await loginRes.text();
@@ -61,10 +61,10 @@ export async function handlePSNBootstrap({
 
     // Defensive validation: never trust backend blindly
     if (!loginData.accessToken || !loginData.accountId) {
-      throw new Error('Invalid login payload');
+      throw new Error("Invalid login payload");
     }
 
-    console.log('✅ Access token received');
+    console.log("✅ Access token received");
 
     // --------------------------------------------------
     // STEP 2 — Fetch trophies for this account
@@ -74,12 +74,12 @@ export async function handlePSNBootstrap({
       {
         headers: {
           Authorization: `Bearer ${loginData.accessToken}`,
-          'Accept-Language': 'en-US',
+          "Accept-Language": "en-US",
         },
       }
     );
 
-    console.log('🔎 trophies status:', trophiesRes.status);
+    console.log("🔎 trophies status:", trophiesRes.status);
 
     if (!trophiesRes.ok) {
       const text = await trophiesRes.text();
@@ -100,15 +100,14 @@ export async function handlePSNBootstrap({
       success: true,
       data: trophiesData,
     };
-
   } catch (err: any) {
     // --------------------------------------------------
     // ERROR HANDLING
     // --------------------------------------------------
-    console.error('❌ LOGIN FLOW ERROR:', err);
+    console.error("❌ LOGIN FLOW ERROR:", err);
 
     // User-facing error (only failure should be noisy)
-    Alert.alert('Login failed', err.message ?? 'Unknown error');
+    Alert.alert("Login failed", err.message ?? "Unknown error");
 
     return {
       success: false,

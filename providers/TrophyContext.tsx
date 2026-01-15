@@ -5,6 +5,7 @@
  * - Future: fetch logic will move to a dedicated data layer
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { PROXY_BASE_URL } from "../config/endpoints";
 import { useDeltaRefresh } from "../utils/useDeltaRefresh";
 
 export type UserProfile = {
@@ -17,6 +18,8 @@ export type UserProfile = {
 type TrophyContextType = {
   trophies: any;
   setTrophies: (data: any) => void;
+
+  refreshAllTrophies: () => Promise<void>;
 
   accountId: string | null;
   setAccountId: (id: string | null) => void;
@@ -31,6 +34,8 @@ type TrophyContextType = {
 const TrophyContext = createContext<TrophyContextType>({
   trophies: null,
   setTrophies: () => {},
+
+  refreshAllTrophies: async () => {},
 
   accountId: null,
   setAccountId: () => {},
@@ -50,53 +55,39 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile>(null);
+  const refreshAllTrophies = async () => {
+    if (!accessToken || !accountId) return;
+
+    try {
+      const res = await fetch(`${PROXY_BASE_URL}/api/trophies/${accountId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const data = await res.json();
+      setTrophies(data);
+    } catch (err) {
+      console.log("❌ Full trophy refresh failed", err);
+    }
+  };
   useEffect(() => {
     if (!accessToken || !accountId) return;
 
     let cancelled = false;
-    // NOTE: Using EXPO_PUBLIC_PROXY_BASE_URL directly here.
-    // Will be unified with config/endpoints.ts after audit.
-    const fetchTrophies = async () => {
-      try {
-        const res = await fetch(
-          `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        );
 
-        const data = await res.json();
+    const run = async () => {
+      await refreshAllTrophies();
+
+      // 🔁 optional second pass (keep your existing behavior)
+      setTimeout(async () => {
         if (!cancelled) {
-          setTrophies(data);
+          await refreshAllTrophies();
         }
-
-        // 🔁 ONE silent re-fetch to pick up full cache
-        setTimeout(async () => {
-          try {
-            const res2 = await fetch(
-              `${process.env.EXPO_PUBLIC_PROXY_BASE_URL}/api/trophies/${accountId}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                },
-              }
-            );
-            const data2 = await res2.json();
-            if (!cancelled) {
-              setTrophies(data2);
-            }
-          } catch {
-            // silent
-          }
-        }, 1500);
-      } catch (err) {
-        console.log("❌ Trophy fetch failed", err);
-      }
+      }, 1500);
     };
 
-    fetchTrophies();
+    run();
 
     return () => {
       cancelled = true;
@@ -105,9 +96,12 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   useDeltaRefresh({
     accessToken,
     accountId,
+    trophyTitles: trophies?.trophyTitles ?? null,
     onResults: (games: any[]) => {
       setTrophies((prev: any) => {
         if (!prev || !Array.isArray(prev.trophyTitles)) return prev;
+
+        let hasAnyDelta = false;
 
         const updatedTitles = prev.trophyTitles.map((title: any) => {
           const updated = games.find(
@@ -116,24 +110,25 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (!updated) return title;
 
+          const prevEarned = title.trophies?.earned ?? 0;
+          const nextEarned = updated.trophies?.earned ?? 0;
+
+          if (prevEarned !== nextEarned) {
+            hasAnyDelta = true;
+          }
+
           return {
             ...title,
             trophies: updated.trophies,
           };
         });
-        const prevEarned = prev.trophyTitles.reduce(
-          (sum: number, t: any) => sum + (t.earnedTrophies ?? 0),
-          0
-        );
-        const nextEarned = updatedTitles.reduce(
-          (sum: number, t: any) => sum + (t.trophies?.earned ?? 0),
-          0
-        );
 
-        if (nextEarned <= prevEarned) {
-          return prev; // 🚫 no re-render
+        if (!hasAnyDelta) {
+          return prev; // 🚫 no meaningful change → no re-render
         }
-        console.log("🏆 Trophy count increased:", prevEarned, "→", nextEarned);
+
+        console.log("🏆 Trophy delta detected via Tier-1 refresh");
+
         return {
           ...prev,
           trophyTitles: updatedTitles,
@@ -145,6 +140,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
     () => ({
       trophies,
       setTrophies,
+      refreshAllTrophies,
       accountId,
       setAccountId,
       accessToken,

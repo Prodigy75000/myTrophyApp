@@ -18,6 +18,8 @@ export default function HomeScreen() {
     );
   }, [searchText, trophies]);
   const [sortMode, setSortMode] = useState<SortMode>("DEFAULT");
+  const { refreshAllTrophies } = useTrophy();
+  const [refreshing, setRefreshing] = useState(false);
   const sortedTrophies = React.useMemo(() => {
     const list = [...filteredTrophies];
 
@@ -94,8 +96,15 @@ export default function HomeScreen() {
       {trophies && trophies.trophyTitles ? (
         <FlatList
           data={sortedTrophies}
-          keyExtractor={(item) => item.npCommunicationId}
+          keyExtractor={(item) => String(item.npCommunicationId)}
           renderItem={renderGame}
+          // 🔁 Pull-to-refresh (soft full refresh)
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await refreshAllTrophies();
+            setRefreshing(false);
+          }}
           initialNumToRender={10}
           maxToRenderPerBatch={8}
           windowSize={5}

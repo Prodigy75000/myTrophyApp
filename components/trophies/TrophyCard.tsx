@@ -1,4 +1,4 @@
-import { Image, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 
 type TrophyCardProps = {
@@ -10,6 +10,8 @@ type TrophyCardProps = {
   earned: boolean;
   earnedAt?: string;
   rarity?: number;
+  justEarned?: boolean;
+  onPress?: () => void;
 };
 const trophyTypeIcon = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
@@ -25,15 +27,16 @@ export default function TrophyCard({
   earned,
   earnedAt,
   rarity,
+  onPress,
 }: TrophyCardProps) {
   return (
-    <View
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: "#222" }}
       style={{
         flexDirection: "row",
         backgroundColor: "#1c1c26",
         borderRadius: 10,
-        paddingVertical: 2,
-        paddingHorizontal: 0,
         marginBottom: 3,
         opacity: earned ? 1 : 0.55,
       }}
@@ -49,9 +52,10 @@ export default function TrophyCard({
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Image
             source={trophyTypeIcon[type]}
+            resizeMode="contain"
             style={{
-              width: 14,
-              height: 14,
+              width: 18,
+              height: 18,
               marginRight: 6,
               opacity: earned ? 1 : 0.6,
             }}
@@ -93,6 +97,6 @@ export default function TrophyCard({
           </Text>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }

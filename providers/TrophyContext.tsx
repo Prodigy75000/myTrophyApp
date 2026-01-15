@@ -121,7 +121,19 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
             trophies: updated.trophies,
           };
         });
+        const prevEarned = prev.trophyTitles.reduce(
+          (sum: number, t: any) => sum + (t.earnedTrophies ?? 0),
+          0
+        );
+        const nextEarned = updatedTitles.reduce(
+          (sum: number, t: any) => sum + (t.trophies?.earned ?? 0),
+          0
+        );
 
+        if (nextEarned <= prevEarned) {
+          return prev; // 🚫 no re-render
+        }
+        console.log("🏆 Trophy count increased:", prevEarned, "→", nextEarned);
         return {
           ...prev,
           trophyTitles: updatedTitles,

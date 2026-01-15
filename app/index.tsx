@@ -86,7 +86,6 @@ export default function HomeScreen() {
       <HeaderActionBar
         onMenuPress={() => (navigation as any).openDrawer()}
         onLocalSearch={setSearchText}
-        onGlobalSearch={() => console.log("go to global search")}
         sortMode={sortMode}
         onSortChange={setSortMode}
       />

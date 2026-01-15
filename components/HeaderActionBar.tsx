@@ -9,7 +9,6 @@ export type SortMode = "DEFAULT" | "LAST_PLAYED" | "TITLE" | "PROGRESS";
 type HeaderActionBarProps = {
   onMenuPress: () => void;
   onLocalSearch: (text: string) => void;
-  onGlobalSearch: () => void;
   sortMode: SortMode;
   onSortChange: (mode: SortMode) => void;
 };
@@ -19,7 +18,6 @@ type HeaderActionBarProps = {
 export default function HeaderActionBar({
   onMenuPress,
   onLocalSearch,
-  onGlobalSearch,
   sortMode,
   onSortChange,
 }: HeaderActionBarProps) {

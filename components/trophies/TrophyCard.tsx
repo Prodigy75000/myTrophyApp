@@ -2,7 +2,7 @@ import { Image, Text, View } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 
 type TrophyCardProps = {
-  id: string;
+  id: number;
   name: string;
   description: string;
   icon: string;

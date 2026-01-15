@@ -1,18 +1,15 @@
 // server.js
-const { Buffer } = require("buffer");
-const dns = require("dns");
-dns.setServers(["8.8.8.8", "1.1.1.1"]); // ✅ force reliable DNS
-
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const fetch = require("node-fetch");
+const { Buffer } = require("buffer");
+
 const {
   exchangeNpssoForCode,
   exchangeCodeForAccessToken,
   getProfileFromUserName,
 } = require("psn-api");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 dotenv.config();
 
@@ -21,49 +18,127 @@ app.use(cors());
 app.use(express.json());
 
 const NPSSO = process.env.PSN_NPSSO;
-let accessCache = null;
-const trophyCache = new Map();
-async function getAccessToken() {
-  if (accessCache && Date.now() < accessCache.expiresAt) {
-    return accessCache.token;
-  }
-  const code = await exchangeNpssoForCode(NPSSO);
-  const tokens = await exchangeCodeForAccessToken(code);
-  accessCache = {
-    token: tokens.accessToken,
-    expiresAt: Date.now() + tokens.expiresIn * 1000,
-  };
-  return accessCache.token;
+if (!NPSSO) {
+  console.error("❌ Missing env var PSN_NPSSO. Add it to your .env file.");
+  process.exit(1);
 }
-// ---------------- LOGIN ----------------
-app.get("/api/login", async (req, res) => {
-  try {
-    const authorization = await exchangeNpssoForCode(NPSSO);
-    const tokenData = await exchangeCodeForAccessToken(authorization);
 
-    let decodedPayload;
-    try {
-      const base64Payload = tokenData.accessToken.split(".")[1];
+/**
+ * ------------------------------------------------------------
+ * Helpers
+ * ------------------------------------------------------------
+ */
+
+// 1) Bearer token extraction for routes where frontend sends token
+function requireBearer(req, res) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing token" });
+    return null;
+  }
+  return authHeader.split(" ")[1];
+}
+
+// 2) Service auth (NPSSO -> code -> access token) cached
+let serviceAuthCache = null;
+// shape: { accessToken, refreshToken, expiresAt, expiresIn, tokenType, accountId }
+
+async function getServiceAuth() {
+  if (serviceAuthCache && Date.now() < serviceAuthCache.expiresAt) {
+    return serviceAuthCache;
+  }
+
+  const code = await exchangeNpssoForCode(NPSSO);
+  const tokenData = await exchangeCodeForAccessToken(code);
+
+  // Try decode JWT payload if it looks like a JWT (3 dot-separated parts)
+  let decodedPayload = null;
+  try {
+    const parts = String(tokenData.accessToken).split(".");
+    if (parts.length === 3) {
+      const base64Payload = parts[1];
       const normalized = base64Payload.replace(/-/g, "+").replace(/_/g, "/");
       decodedPayload = JSON.parse(Buffer.from(normalized, "base64").toString("utf8"));
-    } catch (e) {
-      console.error("⚠️ Failed to decode accessToken:", e.message);
     }
+  } catch (e) {
+    // not fatal — token may not be a JWT
+    console.warn("⚠️ accessToken not decodable as JWT:", e.message);
+  }
 
-    const accountId =
-      decodedPayload?.account_id ||
-      decodedPayload?.accountId ||
-      tokenData.accountId ||
-      tokenData.user_id ||
-      null;
+  const accountId =
+    decodedPayload?.account_id ||
+    decodedPayload?.accountId ||
+    tokenData.accountId ||
+    tokenData.user_id ||
+    null;
 
-    console.log("✅ PSN access token retrieved for:", accountId);
+  const expiresIn = Number(tokenData.expiresIn || 0);
+  const expiresAt = Date.now() + Math.max(expiresIn, 60) * 1000; // minimum 60s safety
+
+  serviceAuthCache = {
+    accessToken: tokenData.accessToken,
+    refreshToken: tokenData.refreshToken,
+    expiresIn,
+    tokenType: tokenData.tokenType || "Bearer",
+    accountId,
+    expiresAt,
+  };
+
+  console.log("✅ Service access token refreshed for:", accountId);
+  return serviceAuthCache;
+}
+
+// 3) Fetch helper with legacy fallback for trophy endpoints
+async function fetchWithFallback(url, headers) {
+  let response = await fetch(url, { headers });
+
+  // Legacy fallback: try npServiceName=trophy if 404
+  if (!response.ok && response.status === 404) {
+    const sep = url.includes("?") ? "&" : "?";
+    response = await fetch(`${url}${sep}npServiceName=trophy`, { headers });
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text);
+  }
+
+  return response.json();
+}
+
+// 4) Merge trophy definitions + user progress efficiently
+function mergeTrophies(definitions, progress) {
+  const progressById = new Map();
+  for (const p of progress) progressById.set(p.trophyId, p);
+
+  return definitions.map((def) => {
+    const user = progressById.get(def.trophyId);
+    return {
+      ...def,
+      earned: user?.earned ?? false,
+      earnedDateTime: user?.earnedDateTime ?? null,
+    };
+  });
+}
+
+/**
+ * ------------------------------------------------------------
+ * Routes
+ * ------------------------------------------------------------
+ */
+
+// ---------------- LOGIN ----------------
+// Returns a cached service token so your frontend can use it.
+// This avoids burning NPSSO exchanges every time you press "login".
+app.get("/api/login", async (req, res) => {
+  try {
+    const auth = await getServiceAuth();
     res.json({
-      accessToken: tokenData.accessToken,
-      refreshToken: tokenData.refreshToken,
-      expiresIn: tokenData.expiresIn,
-      accountId,
-      tokenType: tokenData.tokenType || "Bearer",
+      accessToken: auth.accessToken,
+      refreshToken: auth.refreshToken,
+      expiresIn: auth.expiresIn,
+      accountId: auth.accountId,
+      tokenType: auth.tokenType,
     });
   } catch (err) {
     console.error("❌ Login error:", err.message);
@@ -73,14 +148,15 @@ app.get("/api/login", async (req, res) => {
     });
   }
 });
+
 // ---------------- PROFILE ----------------
 app.get("/api/profile/:username", async (req, res) => {
   try {
-    const accessToken = await getAccessToken();
-    const profile = await getProfileFromUserName(accessToken, req.params.username);
+    const auth = await getServiceAuth();
+    const profile = await getProfileFromUserName(auth.accessToken, req.params.username);
     res.json(profile);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Profile error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -88,35 +164,26 @@ app.get("/api/profile/:username", async (req, res) => {
 // ---------------- TROPHIES (LIBRARY) ----------------
 app.get("/api/trophies/:accountId", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
-    }
-    const accessToken = authHeader.split(" ")[1];
-    const { accountId } = req.params;
+    const accessToken = requireBearer(req, res);
+    if (!accessToken) return;
 
+    const { accountId } = req.params;
     const baseUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/trophyTitles`;
 
-    let allTitles = [];
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Accept-Language": "en-US",
+      "User-Agent": "Mozilla/5.0",
+    };
+
+    const allTitles = [];
     let offset = 0;
     const limit = 100;
 
     while (true) {
       const url = `${baseUrl}?limit=${limit}&offset=${offset}`;
+      const json = await fetchWithFallback(url, headers);
 
-      const r = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Accept-Language": "en-US",
-        },
-      });
-
-      if (!r.ok) {
-        const t = await r.text();
-        return res.status(r.status).json({ error: t });
-      }
-
-      const json = await r.json();
       const page = json.trophyTitles ?? [];
       allTitles.push(...page);
 
@@ -125,7 +192,7 @@ app.get("/api/trophies/:accountId", async (req, res) => {
     }
 
     // 🔎 Log high-value identity signals
-    allTitles.forEach((t) => {
+    for (const t of allTitles) {
       console.log("[TITLE OBSERVED]", {
         npwr: t.npCommunicationId,
         name: t.trophyTitleName,
@@ -133,28 +200,26 @@ app.get("/api/trophies/:accountId", async (req, res) => {
         service: t.npServiceName,
         version: t.trophySetVersion,
       });
-    });
+    }
 
     res.json({
       totalItemCount: allTitles.length,
-      trophyTitles: allTitles, // untouched
+      trophyTitles: allTitles,
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Library error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-// ---------------- GAME TROPHIES (MAX SIGNAL) ----------------
+
+// ---------------- GAME TROPHIES ----------------
 app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
   const { gameName, platform } = req.query;
 
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
-    }
+    const accessToken = requireBearer(req, res);
+    if (!accessToken) return;
 
-    const accessToken = authHeader.split(" ")[1];
     const { accountId, npCommunicationId } = req.params;
 
     const headers = {
@@ -163,59 +228,27 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       "User-Agent": "Mozilla/5.0",
     };
 
-    // Fetch helper with legacy fallback
-    const fetchWithFallback = async (baseUrl) => {
-      let response = await fetch(baseUrl, { headers });
-
-      if (!response.ok && response.status === 404) {
-        const sep = baseUrl.includes("?") ? "&" : "?";
-        response = await fetch(`${baseUrl}${sep}npServiceName=trophy`, { headers });
-      }
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text);
-      }
-
-      return response.json();
-    };
-
-    // A. USER PROGRESS
+    // A) USER PROGRESS
     const progressUrl =
       `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
       `/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
 
-    const progressJson = await fetchWithFallback(progressUrl);
+    const progressJson = await fetchWithFallback(progressUrl, headers);
     const progress = progressJson.trophies ?? [];
 
-    // B. DEFINITIONS (also contains metadata)
+    // B) DEFINITIONS
     const defUrl =
       `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}` +
       `/trophyGroups/all/trophies`;
 
-    const defJson = await fetchWithFallback(defUrl);
+    const defJson = await fetchWithFallback(defUrl, headers);
     const definitions = defJson.trophies ?? [];
 
-    // C. MERGE
-    const merged = definitions.map((def) => {
-      const user = progress.find((p) => p.trophyId === def.trophyId);
-      return {
-        ...def,
-        earned: user?.earned ?? false,
-        earnedDateTime: user?.earnedDateTime ?? null,
-      };
-    });
-
+    // C) MERGE
+    const merged = mergeTrophies(definitions, progress);
     const finalData = merged.length > 0 ? merged : progress;
 
-    // D. META (first-party only)
-    const trophyService = defJson?.npServiceName === "trophy2" ? "modern" : "legacy";
-
-    console.log("[GAME OBSERVED]", {
-      npwr: npCommunicationId,
-      gameName,
-      platform,
-    });
+    console.log("[GAME OBSERVED]", { npwr: npCommunicationId, gameName, platform });
 
     return res.json({
       meta: {
@@ -226,22 +259,19 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       trophies: finalData,
     });
   } catch (err) {
-    console.error("🔥 SERVER ERROR:", err);
+    console.error("🔥 SERVER ERROR:", err.message);
     return res.status(500).json({ error: err.message });
   }
 });
+
 // -------------- REFRESH ROUTE ----------------
 app.post("/api/trophies/refresh", async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing token" });
-    }
+    const accessToken = requireBearer(req, res);
+    if (!accessToken) return;
 
-    const accessToken = authHeader.split(" ")[1];
     const { accountId, games } = req.body;
 
-    // games = [{ npwr, gameName, platform }]
     if (!Array.isArray(games) || games.length === 0) {
       return res.json({ updatedAt: Date.now(), games: [] });
     }
@@ -252,27 +282,10 @@ app.post("/api/trophies/refresh", async (req, res) => {
       "User-Agent": "Mozilla/5.0",
     };
 
-    const fetchWithFallback = async (baseUrl) => {
-      let response = await fetch(baseUrl, { headers });
-
-      if (!response.ok && response.status === 404) {
-        const sep = baseUrl.includes("?") ? "&" : "?";
-        response = await fetch(`${baseUrl}${sep}npServiceName=trophy`, { headers });
-      }
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text);
-      }
-
-      return response.json();
-    };
-
     const results = [];
 
     for (const game of games) {
       const { npwr, gameName, platform } = game;
-
       console.log("[DELTA REFRESH]", { npwr, gameName, platform });
 
       try {
@@ -280,33 +293,20 @@ app.post("/api/trophies/refresh", async (req, res) => {
           `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
           `/npCommunicationIds/${npwr}/trophyGroups/all/trophies`;
 
-        const progressJson = await fetchWithFallback(progressUrl);
+        const progressJson = await fetchWithFallback(progressUrl, headers);
         const progress = progressJson.trophies ?? [];
 
         const defUrl =
           `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npwr}` +
           `/trophyGroups/all/trophies`;
 
-        const defJson = await fetchWithFallback(defUrl);
+        const defJson = await fetchWithFallback(defUrl, headers);
         const definitions = defJson.trophies ?? [];
 
-        const merged = definitions.map((def) => {
-          const user = progress.find((p) => p.trophyId === def.trophyId);
-          return {
-            ...def,
-            earned: user?.earned ?? false,
-            earnedDateTime: user?.earnedDateTime ?? null,
-          };
-        });
-
+        const merged = mergeTrophies(definitions, progress);
         const trophies = merged.length > 0 ? merged : progress;
 
-        results.push({
-          npwr,
-          gameName,
-          platform,
-          trophies,
-        });
+        results.push({ npwr, gameName, platform, trophies });
       } catch (e) {
         console.warn("⚠️ Delta refresh failed for", npwr, e.message);
       }
@@ -317,7 +317,7 @@ app.post("/api/trophies/refresh", async (req, res) => {
       games: results,
     });
   } catch (err) {
-    console.error("🔥 DELTA REFRESH ERROR:", err);
+    console.error("🔥 DELTA REFRESH ERROR:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

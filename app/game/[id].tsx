@@ -1,26 +1,40 @@
 import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
 import TrophyCard from "../../components/trophies/TrophyCard";
 import { PROXY_BASE_URL } from "../../config/endpoints";
 import { useTrophy } from "../../providers/TrophyContext";
 import { useMarkRecentGame } from "../../utils/makeRecent";
+import { normalizeTrophyType } from "../../utils/normalizeTrophy";
+
+type GameTrophy = {
+  trophyId: number;
+  trophyName: string;
+  trophyDetail: string;
+  trophyIconUrl: string;
+  trophyType: string;
+  earned?: boolean;
+  earnedDateTime?: string | null;
+};
 
 export default function GameScreen() {
-  const params = useLocalSearchParams();
+  const { id: rawId } = useLocalSearchParams();
   const { trophies, accessToken, accountId } = useTrophy();
   const markRecentGame = useMarkRecentGame();
-  const [gameTrophies, setGameTrophies] = useState<any[]>([]);
-  const [loadingTrophies, setLoadingTrophies] = useState(false);
 
-  const rawId = params.id;
-  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+  const [gameTrophies, setGameTrophies] = useState<GameTrophy[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const game = trophies?.trophyTitles?.find(
-    (g: any) => String(g.npCommunicationId) === String(id)
-  );
+  const npwr = Array.isArray(rawId) ? rawId[0] : rawId;
 
-  // ✅ HOOKS ALWAYS RUN — NO RETURNS ABOVE
+  const game = useMemo(() => {
+    if (!npwr) return null;
+    return trophies?.trophyTitles?.find(
+      (g: any) => String(g.npCommunicationId) === String(npwr)
+    );
+  }, [npwr, trophies]);
+
+  // ---- Mark recent game (once per game change)
   useEffect(() => {
     if (!game) return;
 
@@ -29,18 +43,17 @@ export default function GameScreen() {
       gameName: game.trophyTitleName,
       platform: game.trophyTitlePlatform,
     });
-  }, [game]);
+  }, [game, markRecentGame]);
+
+  // ---- Fetch trophies for this game
   useEffect(() => {
     if (!accountId || !accessToken || !game) return;
-    // 🔥 CLEAR PREVIOUS GAME TROPHIES IMMEDIATELY
-    setGameTrophies([]);
-    console.log("🚀 FETCH EFFECT RUNNING");
-    setLoadingTrophies(true);
-    /**
-     * Fetch per-game trophy details.
-     * NOTE: Kept local to this screen (route-specific data).
-     * May move to a dedicated data layer later if reused.
-     */
+
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    setLoading(true);
+
     fetch(
       `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}` +
         `?gameName=${encodeURIComponent(game.trophyTitleName)}` +
@@ -49,69 +62,74 @@ export default function GameScreen() {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        signal,
       }
     )
       .then((r) => r.json())
       .then((data) => {
-        console.log("✅ GAME TROPHIES RESPONSE", {
-          gameName: game.trophyTitleName,
-          npCommunicationId: game.npCommunicationId,
-          trophies: data.trophies,
-        });
-        setGameTrophies(data.trophies ?? []);
+        if (!signal.aborted) {
+          setGameTrophies(data.trophies ?? []);
+        }
       })
-      .catch((e) => console.log("❌ FETCH FAILED", e))
-      .finally(() => setLoadingTrophies(false));
-  }, [accountId, accessToken, trophies, game]);
-  // trophy skeleton
-  function TrophySkeleton() {
-    return (
+      .catch((e) => {
+        if (!signal.aborted) {
+          console.log("❌ GAME TROPHIES FETCH FAILED", e);
+        }
+      })
+      .finally(() => {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [accountId, accessToken, game]);
+
+  // ---- Skeleton
+  const TrophySkeleton = () => (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#111",
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 10,
+      }}
+    >
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: "#111",
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 10,
+          width: 48,
+          height: 48,
+          borderRadius: 6,
+          backgroundColor: "#222",
+          marginRight: 12,
         }}
-      >
-        {/* Icon skeleton */}
+      />
+      <View style={{ flex: 1 }}>
         <View
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: 6,
+            height: 12,
+            width: "70%",
             backgroundColor: "#222",
-            marginRight: 12,
+            borderRadius: 4,
+            marginBottom: 6,
           }}
         />
-
-        {/* Text skeleton */}
-        <View style={{ flex: 1 }}>
-          <View
-            style={{
-              height: 12,
-              width: "70%",
-              backgroundColor: "#222",
-              borderRadius: 4,
-              marginBottom: 6,
-            }}
-          />
-          <View
-            style={{
-              height: 10,
-              width: "50%",
-              backgroundColor: "#222",
-              borderRadius: 4,
-            }}
-          />
-        </View>
+        <View
+          style={{
+            height: 10,
+            width: "50%",
+            backgroundColor: "#222",
+            borderRadius: 4,
+          }}
+        />
       </View>
-    );
-  }
-  // ⛔ EARLY RETURNS ONLY AFTER HOOKS
-  if (!id) {
+    </View>
+  );
+
+  // ---- Guards (after hooks)
+  if (!npwr) {
     return (
       <View>
         <Text>Missing game id</Text>
@@ -128,10 +146,7 @@ export default function GameScreen() {
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: "#000" }}
-      contentContainerStyle={{ padding: 0 }}
-    >
+    <ScrollView style={{ flex: 1, backgroundColor: "#000" }}>
       <Image
         source={{ uri: game.trophyTitleIconUrl }}
         style={{
@@ -144,7 +159,12 @@ export default function GameScreen() {
       />
 
       <Text
-        style={{ color: "white", fontSize: 22, fontWeight: "bold", textAlign: "center" }}
+        style={{
+          color: "white",
+          fontSize: 22,
+          fontWeight: "bold",
+          textAlign: "center",
+        }}
       >
         {game.trophyTitleName}
       </Text>
@@ -153,21 +173,20 @@ export default function GameScreen() {
         {game.progress}% Complete
       </Text>
 
-      {loadingTrophies &&
-        Array.from({ length: 7 }).map((_, i) => <TrophySkeleton key={i} />)}
+      {loading && Array.from({ length: 7 }).map((_, i) => <TrophySkeleton key={i} />)}
 
-      {!loadingTrophies && gameTrophies.length === 0 && (
-        <Text style={{ color: "#999" }}>No trophies found.</Text>
+      {!loading && gameTrophies.length === 0 && (
+        <Text style={{ color: "#999", textAlign: "center" }}>No trophies found.</Text>
       )}
 
-      {gameTrophies.map((trophy: any) => (
+      {gameTrophies.map((trophy) => (
         <TrophyCard
           key={String(trophy.trophyId)}
           id={trophy.trophyId}
           name={trophy.trophyName}
           description={trophy.trophyDetail}
           icon={trophy.trophyIconUrl}
-          type={trophy.trophyType}
+          type={normalizeTrophyType(trophy.trophyType)}
           earned={!!trophy.earned}
           earnedAt={trophy.earnedDateTime ?? undefined}
         />

@@ -1,7 +1,7 @@
 import { Image, Text, View } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 
-type TrophyItemCardProps = {
+type TrophyCardProps = {
   id: string;
   name: string;
   description: string;
@@ -17,7 +17,7 @@ const trophyTypeIcon = {
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
-export default function TrophyItemCard({
+export default function TrophyCard({
   name,
   description,
   icon,
@@ -25,7 +25,7 @@ export default function TrophyItemCard({
   earned,
   earnedAt,
   rarity,
-}: TrophyItemCardProps) {
+}: TrophyCardProps) {
   return (
     <View
       style={{

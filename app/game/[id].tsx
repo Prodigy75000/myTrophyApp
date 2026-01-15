@@ -1,14 +1,15 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
-import TrophyItemCard from "../../components/trophies/TrophyItemCard";
+import TrophyCard from "../../components/trophies/TrophyCard";
 import { PROXY_BASE_URL } from "../../config/endpoints";
 import { useTrophy } from "../../providers/TrophyContext";
+import { useMarkRecentGame } from "../../utils/makeRecent";
 
 export default function GameScreen() {
   const params = useLocalSearchParams();
   const { trophies, accessToken, accountId } = useTrophy();
-
+  const markRecentGame = useMarkRecentGame();
   const [gameTrophies, setGameTrophies] = useState<any[]>([]);
   const [loadingTrophies, setLoadingTrophies] = useState(false);
 
@@ -21,6 +22,15 @@ export default function GameScreen() {
 
   // ✅ HOOKS ALWAYS RUN — NO RETURNS ABOVE
   useEffect(() => {
+    if (!game) return;
+
+    markRecentGame({
+      npwr: String(game.npCommunicationId),
+      gameName: game.trophyTitleName,
+      platform: game.trophyTitlePlatform,
+    });
+  }, [game]);
+  useEffect(() => {
     if (!accountId || !accessToken || !game) return;
     // 🔥 CLEAR PREVIOUS GAME TROPHIES IMMEDIATELY
     setGameTrophies([]);
@@ -31,14 +41,23 @@ export default function GameScreen() {
      * NOTE: Kept local to this screen (route-specific data).
      * May move to a dedicated data layer later if reused.
      */
-    fetch(`${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
+    fetch(
+      `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}` +
+        `?gameName=${encodeURIComponent(game.trophyTitleName)}` +
+        `&platform=${encodeURIComponent(game.trophyTitlePlatform)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    )
       .then((r) => r.json())
       .then((data) => {
-        console.log("✅ GAME TROPHIES RESPONSE", data);
+        console.log("✅ GAME TROPHIES RESPONSE", {
+          gameName: game.trophyTitleName,
+          npCommunicationId: game.npCommunicationId,
+          trophies: data.trophies,
+        });
         setGameTrophies(data.trophies ?? []);
       })
       .catch((e) => console.log("❌ FETCH FAILED", e))
@@ -142,7 +161,7 @@ export default function GameScreen() {
       )}
 
       {gameTrophies.map((trophy: any) => (
-        <TrophyItemCard
+        <TrophyCard
           key={String(trophy.trophyId)}
           id={trophy.trophyId}
           name={trophy.trophyName}

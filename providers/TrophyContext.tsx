@@ -5,6 +5,7 @@
  * - Future: fetch logic will move to a dedicated data layer
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useDeltaRefresh } from "../utils/useDeltaRefresh";
 
 export type UserProfile = {
   onlineId: string;
@@ -101,6 +102,33 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
       cancelled = true;
     };
   }, [accessToken, accountId]);
+  useDeltaRefresh({
+    accessToken,
+    accountId,
+    onResults: (games: any[]) => {
+      setTrophies((prev: any) => {
+        if (!prev || !Array.isArray(prev.trophyTitles)) return prev;
+
+        const updatedTitles = prev.trophyTitles.map((title: any) => {
+          const updated = games.find(
+            (g: any) => String(g.npwr) === String(title.npCommunicationId)
+          );
+
+          if (!updated) return title;
+
+          return {
+            ...title,
+            trophies: updated.trophies,
+          };
+        });
+
+        return {
+          ...prev,
+          trophyTitles: updatedTitles,
+        };
+      });
+    },
+  });
   const value = useMemo(
     () => ({
       trophies,

@@ -1,12 +1,12 @@
-import HeaderActionBar from "@/components/HeaderActionBar";
-import { resolveGameIcon } from "@/utils/resolveIcon";
 import { useNavigation } from "expo-router";
 import React, { useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SortMode } from "../components/HeaderActionBar"; // adjust path
+import HeaderActionBar from "../components/HeaderActionBar";
 import GameCard from "../components/trophies/GameCard";
 import { useTrophy } from "../providers/TrophyContext";
+import { resolveGameIcon } from "../utils/resolveIcon";
 
 export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");

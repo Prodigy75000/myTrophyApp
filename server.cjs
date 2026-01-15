@@ -85,21 +85,16 @@ app.get("/api/profile/:username", async (req, res) => {
   }
 });
 
-// ---------------- TROPHIES ----------------
+// ---------------- TROPHIES (LIBRARY) ----------------
 app.get("/api/trophies/:accountId", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Missing token" });
     }
-
     const accessToken = authHeader.split(" ")[1];
-    const { accountId, npCommunicationId } = req.params;
+    const { accountId } = req.params;
 
-    console.log("[GAME TROPHIES]", {
-      accountId,
-      npCommunicationId,
-    });
     const baseUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/trophyTitles`;
 
     let allTitles = [];
@@ -123,31 +118,42 @@ app.get("/api/trophies/:accountId", async (req, res) => {
 
       const json = await r.json();
       const page = json.trophyTitles ?? [];
-
       allTitles.push(...page);
 
       if (page.length < limit) break;
       offset += limit;
     }
 
+    // 🔎 Log high-value identity signals
+    allTitles.forEach((t) => {
+      console.log("[TITLE OBSERVED]", {
+        npwr: t.npCommunicationId,
+        name: t.trophyTitleName,
+        platforms: t.trophyTitlePlatform,
+        service: t.npServiceName,
+        version: t.trophySetVersion,
+      });
+    });
+
     res.json({
       totalItemCount: allTitles.length,
-      trophyTitles: allTitles,
+      trophyTitles: allTitles, // untouched
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
-// ---------------- GAME TROPHIES (Simplified Version) ----------------
+// ---------------- GAME TROPHIES (MAX SIGNAL) ----------------
 app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
-  console.log("🔥 GAME TROPHIES ROUTE HIT", req.params);
+  const { gameName, platform } = req.query;
 
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Missing token" });
     }
+
     const accessToken = authHeader.split(" ")[1];
     const { accountId, npCommunicationId } = req.params;
 
@@ -157,52 +163,40 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       "User-Agent": "Mozilla/5.0",
     };
 
-    // 1. ATTEMPT FETCH (Default PS5 Endpoint)
-    // We try to get the user's earned status first.
-    let progressUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
-    let response = await fetch(progressUrl, { headers });
+    // Fetch helper with legacy fallback
+    const fetchWithFallback = async (baseUrl) => {
+      let response = await fetch(baseUrl, { headers });
 
-    // 2. CHECK FOR LEGACY GAME (PS3/PS4)
-    // If we get a 404, it means this game isn't on the PS5 server. We switch to legacy mode.
-    let isLegacy = false;
-    if (!response.ok && response.status === 404) {
-      console.log(
-        `[Legacy Detect] ${npCommunicationId} is a PS3/PS4 game. Switching service...`
-      );
-      isLegacy = true;
-      progressUrl += "?npServiceName=trophy"; // Add the required legacy param
-      response = await fetch(progressUrl, { headers });
-    }
+      if (!response.ok && response.status === 404) {
+        const sep = baseUrl.includes("?") ? "&" : "?";
+        response = await fetch(`${baseUrl}${sep}npServiceName=trophy`, { headers });
+      }
 
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).json({ error: text });
-    }
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text);
+      }
 
-    const progressJson = await response.json();
+      return response.json();
+    };
+
+    // A. USER PROGRESS
+    const progressUrl =
+      `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
+      `/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
+
+    const progressJson = await fetchWithFallback(progressUrl);
     const progress = progressJson.trophies ?? [];
 
-    // 3. FETCH STATIC DETAILS (Names, Icons)
-    // If it is legacy, we MUST fetch definitions separately because the user endpoint doesn't return them.
-    let definitions = [];
+    // B. DEFINITIONS (also contains metadata)
+    const defUrl =
+      `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}` +
+      `/trophyGroups/all/trophies`;
 
-    // For PS5 (non-legacy), the user endpoint often has the info, but we fetch definitions to be safe/consistent.
-    // For PS4 (legacy), we add the param.
-    const defBaseUrl = `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
-    const defUrl = isLegacy ? `${defBaseUrl}?npServiceName=trophy` : defBaseUrl;
+    const defJson = await fetchWithFallback(defUrl);
+    const definitions = defJson.trophies ?? [];
 
-    try {
-      const defRes = await fetch(defUrl, { headers });
-      if (defRes.ok) {
-        const defJson = await defRes.json();
-        definitions = defJson.trophies ?? [];
-      }
-    } catch (e) {
-      console.warn("Could not fetch definitions, showing raw progress only.");
-    }
-
-    // 4. MERGE
-    // Combine the static info (name/icon) with the user info (earned date)
+    // C. MERGE
     const merged = definitions.map((def) => {
       const user = progress.find((p) => p.trophyId === def.trophyId);
       return {
@@ -212,12 +206,118 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       };
     });
 
-    // If merge failed (e.g. definitions empty), fallback to progress
     const finalData = merged.length > 0 ? merged : progress;
 
-    res.json({ trophies: finalData });
+    // D. META (first-party only)
+    const trophyService = defJson?.npServiceName === "trophy2" ? "modern" : "legacy";
+
+    console.log("[GAME OBSERVED]", {
+      npwr: npCommunicationId,
+      gameName,
+      platform,
+    });
+
+    return res.json({
+      meta: {
+        npCommunicationId,
+        gameName: gameName ?? null,
+        platform: platform ?? null,
+      },
+      trophies: finalData,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("🔥 SERVER ERROR:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+// -------------- REFRESH ROUTE ----------------
+app.post("/api/trophies/refresh", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Missing token" });
+    }
+
+    const accessToken = authHeader.split(" ")[1];
+    const { accountId, games } = req.body;
+
+    // games = [{ npwr, gameName, platform }]
+    if (!Array.isArray(games) || games.length === 0) {
+      return res.json({ updatedAt: Date.now(), games: [] });
+    }
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "Accept-Language": "en-US",
+      "User-Agent": "Mozilla/5.0",
+    };
+
+    const fetchWithFallback = async (baseUrl) => {
+      let response = await fetch(baseUrl, { headers });
+
+      if (!response.ok && response.status === 404) {
+        const sep = baseUrl.includes("?") ? "&" : "?";
+        response = await fetch(`${baseUrl}${sep}npServiceName=trophy`, { headers });
+      }
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text);
+      }
+
+      return response.json();
+    };
+
+    const results = [];
+
+    for (const game of games) {
+      const { npwr, gameName, platform } = game;
+
+      console.log("[DELTA REFRESH]", { npwr, gameName, platform });
+
+      try {
+        const progressUrl =
+          `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
+          `/npCommunicationIds/${npwr}/trophyGroups/all/trophies`;
+
+        const progressJson = await fetchWithFallback(progressUrl);
+        const progress = progressJson.trophies ?? [];
+
+        const defUrl =
+          `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npwr}` +
+          `/trophyGroups/all/trophies`;
+
+        const defJson = await fetchWithFallback(defUrl);
+        const definitions = defJson.trophies ?? [];
+
+        const merged = definitions.map((def) => {
+          const user = progress.find((p) => p.trophyId === def.trophyId);
+          return {
+            ...def,
+            earned: user?.earned ?? false,
+            earnedDateTime: user?.earnedDateTime ?? null,
+          };
+        });
+
+        const trophies = merged.length > 0 ? merged : progress;
+
+        results.push({
+          npwr,
+          gameName,
+          platform,
+          trophies,
+        });
+      } catch (e) {
+        console.warn("⚠️ Delta refresh failed for", npwr, e.message);
+      }
+    }
+
+    res.json({
+      updatedAt: Date.now(),
+      games: results,
+    });
+  } catch (err) {
+    console.error("🔥 DELTA REFRESH ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });

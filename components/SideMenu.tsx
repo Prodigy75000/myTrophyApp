@@ -75,10 +75,6 @@ export default function SideMenu() {
       <TouchableOpacity onPress={() => router.navigate("/")}>
         <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🏠 Home</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => router.navigate("/library")}>
-        <Text style={{ color: "#fff", fontSize: 16, marginVertical: 8 }}>🎮 Library</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }

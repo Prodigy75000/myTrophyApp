@@ -24,38 +24,32 @@ export function useDeltaRefresh({
   trophyTitles: any[] | null;
   onResults: (games: any[]) => void;
 }) {
-  const { recentGamesRef } = useRecentGames();
+  const { latestGameRef } = useRecentGames();
   const inFlightRef = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const lastEarnedRef = useRef<Map<string, number | null>>(new Map());
   useEffect(() => {
     if (!accessToken || !accountId) return;
     const performDeltaRefresh = async () => {
       if (inFlightRef.current) return;
       if (!accessToken || !accountId) return;
 
-      const recentGames = Array.from(recentGamesRef.current.values());
+      const latest = latestGameRef.current;
+      if (!latest) return;
 
-      const tier1Game =
-        trophyTitles && trophyTitles.length > 0 ? getLastUpdatedGame(trophyTitles) : null;
+      const games = [
+        {
+          npwr: latest.npwr,
+          gameName: latest.gameName,
+          platform: latest.platform,
+        },
+      ];
 
-      const gamesToRefreshMap = new Map<string, any>();
+      console.log(
+        "🔎 Delta refresh games:",
+        games.map((g) => g.npwr)
+      );
 
-      // Tier-1 (mandatory)
-      if (tier1Game) {
-        gamesToRefreshMap.set(tier1Game.npCommunicationId, {
-          npwr: tier1Game.npCommunicationId,
-          gameName: tier1Game.trophyTitleName,
-          platform: tier1Game.trophyTitlePlatform,
-        });
-      }
-
-      // Tier-2 (recently opened, capped)
-      for (const g of recentGames) {
-        if (gamesToRefreshMap.size >= 3) break;
-        gamesToRefreshMap.set(g.npwr, g);
-      }
-
-      const games = Array.from(gamesToRefreshMap.values());
       if (games.length === 0) return;
 
       inFlightRef.current = true;
@@ -67,14 +61,39 @@ export function useDeltaRefresh({
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            accountId,
-            games,
-          }),
+          body: JSON.stringify({ accountId, games }),
         });
 
         const json = await res.json();
-        onResults(json.games);
+
+        const meaningfulChanges = json.games.filter((g: any) => {
+          const npwr = g.npwr;
+          const earned =
+            typeof g.trophies?.earned === "number" ? g.trophies.earned : null;
+
+          const prevEarned = lastEarnedRef.current.get(npwr) ?? null;
+
+          // ignore unhydrated → unhydrated
+          if (earned === null && prevEarned === null) return false;
+
+          // ignore hydration-only
+          if (prevEarned === null && earned !== null) {
+            lastEarnedRef.current.set(npwr, earned);
+            return false;
+          }
+
+          // real delta
+          if (earned !== prevEarned) {
+            lastEarnedRef.current.set(npwr, earned);
+            return true;
+          }
+
+          return false;
+        });
+
+        if (meaningfulChanges.length > 0) {
+          onResults(meaningfulChanges);
+        }
       } catch (e) {
         console.warn("Delta refresh failed", e);
       } finally {

@@ -63,7 +63,26 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile>(null);
-  const { recentGamesRef } = useRecentGames();
+  const { latestGameRef } = useRecentGames();
+  function computeProgressFromCounts(trophies: any) {
+    if (!trophies?.earned || !trophies?.defined) return null;
+
+    const earnedTotal =
+      trophies.earned.bronze +
+      trophies.earned.silver +
+      trophies.earned.gold +
+      trophies.earned.platinum;
+
+    const definedTotal =
+      trophies.defined.bronze +
+      trophies.defined.silver +
+      trophies.defined.gold +
+      trophies.defined.platinum;
+
+    if (definedTotal === 0) return null;
+
+    return Math.floor((earnedTotal / definedTotal) * 100);
+  }
   const refreshAllTrophies = async () => {
     if (!accessToken || !accountId) return;
 
@@ -117,10 +136,13 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
       // ✅ ADD THIS (missing piece)
 
       const trophyList = gameData.trophyList as TrophyItem[] | undefined;
-      const earned = trophyList ? trophyList.filter((t) => t.earned).length : 0;
-      const total = trophyList ? trophyList.length : 0;
-      const progress = total > 0 ? Math.floor((earned / total) * 100) : 0;
+      let progress: number | null = null;
 
+      if (Array.isArray(trophyList) && trophyList.length > 0) {
+        const earned = trophyList.filter((t) => t.earned).length;
+        const total = trophyList.length;
+        progress = Math.floor((earned / total) * 100);
+      }
       setTrophies((prev: any) => {
         if (!prev || !Array.isArray(prev.trophyTitles)) return prev;
 
@@ -132,14 +154,18 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
                   ...t,
                   trophies: gameData.trophies,
                   trophyList: gameData.trophyList,
-                  progress, // 🔑 THIS is what index needs
+                  progress: progress !== null ? progress : t.progress,
                 }
               : t
           ),
         };
       });
 
-      console.log(`🔄 Game ${npwr} refreshed (progress ${progress}%)`);
+      if (progress !== null) {
+        console.log(`🔄 Game ${npwr} refreshed (progress ${progress}%)`);
+      } else {
+        console.log(`🔄 Game ${npwr} refreshed (progress unchanged)`);
+      }
     } catch (err) {
       console.log("❌ Game refresh failed", err);
     }
@@ -153,16 +179,16 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
         "🔎 Delta refresh games:",
         games.map((g) => ({
           npwr: g.npwr,
-          earned: g.trophies?.earned,
+          earned: typeof g.trophies?.earned === "number" ? g.trophies.earned : null,
         }))
       );
 
       // 🔥 ESCALATION — side effect (SAFE here)
-      const latestNpwr = Array.from(recentGamesRef.current.values()).at(-1)?.npwr;
+      const latest = latestGameRef.current;
 
-      if (games.length > 0 && latestNpwr) {
-        console.log("🎯 Escalating refresh for latest game:", latestNpwr);
-        refreshSingleGame(String(latestNpwr));
+      if (games.length > 0 && latest) {
+        console.log("🎯 Escalating refresh for latest game:", latest.npwr);
+        refreshSingleGame(String(latest.npwr));
       }
 
       // 🧠 PURE state update (counts only)
@@ -185,9 +211,26 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
             hasAnyDelta = true;
           }
 
+          const mergedTrophies = updated.trophies ?? title.trophies;
+
+          let nextProgress = title.progress;
+
+          // ✅ recompute progress ONLY if earned actually changed
+          if (
+            updated.trophies &&
+            title.trophies &&
+            updated.trophies.earned !== title.trophies.earned
+          ) {
+            const computed = computeProgressFromCounts(mergedTrophies);
+            if (computed !== null) {
+              nextProgress = computed;
+            }
+          }
+
           return {
             ...title,
-            trophies: updated.trophies,
+            trophies: mergedTrophies,
+            progress: nextProgress,
           };
         });
 

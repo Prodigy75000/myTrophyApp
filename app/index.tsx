@@ -35,7 +35,11 @@ export default function HomeScreen() {
         return list.sort((a, b) => a.trophyTitleName.localeCompare(b.trophyTitleName));
 
       case "PROGRESS":
-        return list.sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
+        return list.sort(
+          (a, b) =>
+            (typeof b.progress === "number" ? b.progress : -1) -
+            (typeof a.progress === "number" ? a.progress : -1)
+        );
 
       case "DEFAULT":
       default:
@@ -52,7 +56,7 @@ export default function HomeScreen() {
         id={item.npCommunicationId}
         title={item.trophyTitleName}
         icon={resolveGameIcon(item.trophyTitleIconUrl)}
-        progress={item.progress}
+        progress={typeof item.progress === "number" ? item.progress : undefined}
         lastPlayed={item.lastUpdatedDateTime}
         counts={{
           total:

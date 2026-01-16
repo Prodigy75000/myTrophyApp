@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { Image, RefreshControl, ScrollView, Text, View } from "react-native";
 import TrophyActionSheet from "../../components/trophies/TrophyActionSheet";
 import TrophyCard from "../../components/trophies/TrophyCard";
 import { PROXY_BASE_URL } from "../../config/endpoints";
@@ -25,6 +25,8 @@ export default function GameScreen() {
 
   const [gameTrophies, setGameTrophies] = useState<GameTrophy[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const { refreshSingleGame, refreshAllTrophies } = useTrophy();
+  const [refreshing, setRefreshing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [justEarnedIds, setJustEarnedIds] = useState<Set<number>>(new Set());
   const [selectedTrophy, setSelectedTrophy] = useState<{
@@ -33,7 +35,12 @@ export default function GameScreen() {
   } | null>(null);
 
   const npwr = Array.isArray(rawId) ? rawId[0] : rawId;
-
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshSingleGame(npwr);
+    await refreshAllTrophies();
+    setRefreshing(false);
+  };
   const game = useMemo(() => {
     if (!npwr) return null;
     return trophies?.trophyTitles?.find(
@@ -202,7 +209,17 @@ export default function GameScreen() {
 
   return (
     <>
-      <ScrollView style={{ flex: 1, backgroundColor: "#000" }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#000" }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="white" // iOS spinner color
+            colors={["#fff"]} // Android spinner color
+          />
+        }
+      >
         <Image
           source={{ uri: game.trophyTitleIconUrl }}
           style={{

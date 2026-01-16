@@ -6,6 +6,7 @@
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { PROXY_BASE_URL } from "../config/endpoints";
+import { useRecentGames } from "../context/RecentGamesContext";
 import { useDeltaRefresh } from "../utils/useDeltaRefresh";
 
 export type UserProfile = {
@@ -14,12 +15,18 @@ export type UserProfile = {
   trophyLevel?: number | null;
   progress?: number | null;
 } | null;
-
+type TrophyItem = {
+  trophyId: number;
+  trophyName: string;
+  earned?: boolean;
+  earnedDateTime?: string | null;
+};
 type TrophyContextType = {
   trophies: any;
   setTrophies: (data: any) => void;
 
   refreshAllTrophies: () => Promise<void>;
+  refreshSingleGame: (npwr: string) => Promise<void>; // 👈 NEW
 
   accountId: string | null;
   setAccountId: (id: string | null) => void;
@@ -36,6 +43,7 @@ const TrophyContext = createContext<TrophyContextType>({
   setTrophies: () => {},
 
   refreshAllTrophies: async () => {},
+  refreshSingleGame: async () => {},
 
   accountId: null,
   setAccountId: () => {},
@@ -55,6 +63,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile>(null);
+  const { recentGamesRef } = useRecentGames();
   const refreshAllTrophies = async () => {
     if (!accessToken || !accountId) return;
 
@@ -93,11 +102,70 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
       cancelled = true;
     };
   }, [accessToken, accountId]);
+  const refreshSingleGame = async (npwr: string) => {
+    if (!accessToken || !accountId) return;
+
+    try {
+      const res = await fetch(`${PROXY_BASE_URL}/api/trophies/${accountId}/${npwr}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const gameData = await res.json();
+
+      // ✅ ADD THIS (missing piece)
+
+      const trophyList = gameData.trophyList as TrophyItem[] | undefined;
+      const earned = trophyList ? trophyList.filter((t) => t.earned).length : 0;
+      const total = trophyList ? trophyList.length : 0;
+      const progress = total > 0 ? Math.floor((earned / total) * 100) : 0;
+
+      setTrophies((prev: any) => {
+        if (!prev || !Array.isArray(prev.trophyTitles)) return prev;
+
+        return {
+          ...prev,
+          trophyTitles: prev.trophyTitles.map((t: any) =>
+            String(t.npCommunicationId) === String(npwr)
+              ? {
+                  ...t,
+                  trophies: gameData.trophies,
+                  trophyList: gameData.trophyList,
+                  progress, // 🔑 THIS is what index needs
+                }
+              : t
+          ),
+        };
+      });
+
+      console.log(`🔄 Game ${npwr} refreshed (progress ${progress}%)`);
+    } catch (err) {
+      console.log("❌ Game refresh failed", err);
+    }
+  };
   useDeltaRefresh({
     accessToken,
     accountId,
     trophyTitles: trophies?.trophyTitles ?? null,
     onResults: (games: any[]) => {
+      console.log(
+        "🔎 Delta refresh games:",
+        games.map((g) => ({
+          npwr: g.npwr,
+          earned: g.trophies?.earned,
+        }))
+      );
+
+      // 🔥 ESCALATION — side effect (SAFE here)
+      const latestNpwr = Array.from(recentGamesRef.current.values()).at(-1)?.npwr;
+
+      if (games.length > 0 && latestNpwr) {
+        console.log("🎯 Escalating refresh for latest game:", latestNpwr);
+        refreshSingleGame(String(latestNpwr));
+      }
+
+      // 🧠 PURE state update (counts only)
       setTrophies((prev: any) => {
         if (!prev || !Array.isArray(prev.trophyTitles)) return prev;
 
@@ -123,11 +191,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
           };
         });
 
-        if (!hasAnyDelta) {
-          return prev; // 🚫 no meaningful change → no re-render
-        }
-
-        console.log("🏆 Trophy delta detected via Tier-1 refresh");
+        if (!hasAnyDelta) return prev;
 
         return {
           ...prev,
@@ -141,6 +205,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
       trophies,
       setTrophies,
       refreshAllTrophies,
+      refreshSingleGame,
       accountId,
       setAccountId,
       accessToken,

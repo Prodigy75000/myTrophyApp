@@ -204,8 +204,19 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (!updated) return title;
 
-          const prevEarned = title.trophies?.earned ?? 0;
-          const nextEarned = updated.trophies?.earned ?? 0;
+          const prevEarned = title.earnedTrophies
+            ? title.earnedTrophies.bronze +
+              title.earnedTrophies.silver +
+              title.earnedTrophies.gold +
+              title.earnedTrophies.platinum
+            : 0;
+
+          const nextEarned = updated.trophies?.earned
+            ? updated.trophies.earned.bronze +
+              updated.trophies.earned.silver +
+              updated.trophies.earned.gold +
+              updated.trophies.earned.platinum
+            : prevEarned;
 
           if (prevEarned !== nextEarned) {
             hasAnyDelta = true;
@@ -230,6 +241,25 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
           return {
             ...title,
             trophies: mergedTrophies,
+
+            earnedTrophies: mergedTrophies?.earned
+              ? {
+                  bronze: mergedTrophies.earned.bronze,
+                  silver: mergedTrophies.earned.silver,
+                  gold: mergedTrophies.earned.gold,
+                  platinum: mergedTrophies.earned.platinum,
+                }
+              : title.earnedTrophies,
+
+            definedTrophies: mergedTrophies?.defined
+              ? {
+                  bronze: mergedTrophies.defined.bronze,
+                  silver: mergedTrophies.defined.silver,
+                  gold: mergedTrophies.defined.gold,
+                  platinum: mergedTrophies.defined.platinum,
+                }
+              : title.definedTrophies,
+
             progress: nextProgress,
           };
         });

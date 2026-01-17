@@ -51,7 +51,7 @@ export default function ProgressCircle({ size = 34, strokeWidth = 4, progress }:
       </Svg>
 
       {/* Percentage text */}
-      <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>{progress}%</Text>
+      <Text style={{ color: "#fff", fontSize: 9, fontWeight: "700" }}>{progress}%</Text>
     </View>
   );
 }

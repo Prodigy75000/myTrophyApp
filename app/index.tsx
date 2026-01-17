@@ -1,55 +1,70 @@
 import { useNavigation } from "expo-router";
-import React, { useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Animated, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { SortMode } from "../components/HeaderActionBar"; // adjust path
+import type { SortDirection, SortMode } from "../components/HeaderActionBar";
 import HeaderActionBar from "../components/HeaderActionBar";
 import GameCard from "../components/trophies/GameCard";
 import { useTrophy } from "../providers/TrophyContext";
 import { resolveGameIcon } from "../utils/resolveIcon";
 
+const BASE_HEADER_HEIGHT = 60; // Just the content height
+
 export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");
-  const { trophies } = useTrophy();
+  const { trophies, refreshAllTrophies } = useTrophy();
+  const [refreshing, setRefreshing] = useState(false);
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
+  // Sort State
+  const [sortMode, setSortMode] = useState<SortMode>("LAST_PLAYED");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("DESC");
+
+  // 1️⃣ CALCULATE TOTAL HEIGHT (Content + Status Bar)
+  const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
+
+  // 🎬 ANIMATION SETUP
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // 2️⃣ UPDATE DIFFCLAMP TO USE TOTAL HEIGHT
+  const diffClamp = useMemo(
+    () => Animated.diffClamp(scrollY, 0, totalHeaderHeight),
+    [scrollY, totalHeaderHeight]
+  );
+
+  const translateY = diffClamp.interpolate({
+    inputRange: [0, totalHeaderHeight],
+    outputRange: [0, -totalHeaderHeight], // Slide up completely off-screen
+  });
+
+  // Filter & Sort Logic (Keep existing logic)
   const filteredTrophies = React.useMemo(() => {
     if (!trophies?.trophyTitles) return [];
     return trophies.trophyTitles.filter((game: any) =>
       game.trophyTitleName.toLowerCase().includes(searchText.toLowerCase())
     );
   }, [searchText, trophies]);
-  const [sortMode, setSortMode] = useState<SortMode>("DEFAULT");
-  const { refreshAllTrophies } = useTrophy();
-  const [refreshing, setRefreshing] = useState(false);
+
   const sortedTrophies = React.useMemo(() => {
     const list = [...filteredTrophies];
+    const dir = sortDirection === "ASC" ? 1 : -1;
 
-    switch (sortMode) {
-      case "LAST_PLAYED":
-        return list.sort(
-          (a, b) =>
-            new Date(b.lastUpdatedDateTime).getTime() -
-            new Date(a.lastUpdatedDateTime).getTime()
+    return list.sort((a, b) => {
+      if (sortMode === "TITLE")
+        return a.trophyTitleName.localeCompare(b.trophyTitleName) * dir;
+      if (sortMode === "PROGRESS")
+        return (
+          ((typeof a.progress === "number" ? a.progress : -1) -
+            (typeof b.progress === "number" ? b.progress : -1)) *
+          dir
         );
+      const timeA = new Date(a.lastUpdatedDateTime).getTime();
+      const timeB = new Date(b.lastUpdatedDateTime).getTime();
+      return (timeA - timeB) * dir;
+    });
+  }, [filteredTrophies, sortMode, sortDirection]);
 
-      case "TITLE":
-        return list.sort((a, b) => a.trophyTitleName.localeCompare(b.trophyTitleName));
-
-      case "PROGRESS":
-        return list.sort(
-          (a, b) =>
-            (typeof b.progress === "number" ? b.progress : -1) -
-            (typeof a.progress === "number" ? a.progress : -1)
-        );
-
-      case "DEFAULT":
-      default:
-        return list;
-    }
-  }, [filteredTrophies, sortMode]);
-
-  const navigation = useNavigation();
-
-  const insets = useSafeAreaInsets();
   const renderGame = React.useCallback(
     ({ item }: { item: any }) => (
       <GameCard
@@ -78,43 +93,61 @@ export default function HomeScreen() {
     []
   );
 
-  // RENDER MAIN HOME SCREEN
-  // with fixed header and scrollable content below
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: "#0a0b0fff",
-        paddingTop: insets.top, // <--- This is the key!
-      }}
-    >
-      {/* 🔥 Fixed Action Bar */}
-      <HeaderActionBar
-        onMenuPress={() => (navigation as any).openDrawer()}
-        onLocalSearch={setSearchText}
-        sortMode={sortMode}
-        onSortChange={setSortMode}
-      />
+    <View style={{ flex: 1, backgroundColor: "#0a0b0fff" }}>
+      {/* 🎬 HEADER WRAPPER */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          paddingTop: insets.top,
+          backgroundColor: "#0a0b0fff",
+          transform: [{ translateY }],
+          height: totalHeaderHeight, // Enforce explicit height
+        }}
+      >
+        <HeaderActionBar
+          onMenuPress={() => (navigation as any).openDrawer()}
+          onLocalSearch={setSearchText}
+          sortMode={sortMode}
+          onSortChange={setSortMode}
+          sortDirection={sortDirection}
+          onSortDirectionChange={() =>
+            setSortDirection((prev) => (prev === "ASC" ? "DESC" : "ASC"))
+          }
+        />
+      </Animated.View>
 
-      {/* 🔽 Scrollable content BELOW */}
+      {/* LIST CONTENT */}
       {trophies && trophies.trophyTitles ? (
-        <FlatList
+        <Animated.FlatList
           data={sortedTrophies}
           keyExtractor={(item) => String(item.npCommunicationId)}
           renderItem={renderGame}
-          // 🔁 Pull-to-refresh (soft full refresh)
           refreshing={refreshing}
           onRefresh={async () => {
             setRefreshing(true);
             await refreshAllTrophies();
             setRefreshing(false);
           }}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+            useNativeDriver: true,
+          })}
+          scrollEventThrottle={16}
+          // 3️⃣ PADDING MUST MATCH TOTAL HEIGHT
+          contentContainerStyle={{
+            paddingTop: totalHeaderHeight + 20,
+            paddingBottom: 20,
+          }}
           initialNumToRender={10}
           maxToRenderPerBatch={8}
           windowSize={5}
           removeClippedSubviews
           ListHeaderComponent={
-            <View style={{ alignItems: "center", paddingVertical: 20 }}>
+            <View style={{ alignItems: "center", marginBottom: 10 }}>
               <Text style={{ color: "white" }}>
                 Total Titles: {sortedTrophies.length}
               </Text>
@@ -122,7 +155,9 @@ export default function HomeScreen() {
           }
         />
       ) : (
-        <Text style={{ color: "red", marginTop: 20 }}>⚠️ No trophy data yet.</Text>
+        <Text style={{ color: "red", marginTop: 100, textAlign: "center" }}>
+          ⚠️ No trophy data yet.
+        </Text>
       )}
     </View>
   );

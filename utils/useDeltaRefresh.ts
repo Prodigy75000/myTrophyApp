@@ -3,16 +3,6 @@ import { AppState, AppStateStatus } from "react-native";
 import { PROXY_BASE_URL } from "../config/endpoints";
 import { useRecentGames } from "../context/RecentGamesContext";
 
-function getLastUpdatedGame(trophyTitles: any[]) {
-  return trophyTitles
-    .filter((t) => t.lastUpdatedDateTime)
-    .sort(
-      (a, b) =>
-        new Date(b.lastUpdatedDateTime).getTime() -
-        new Date(a.lastUpdatedDateTime).getTime()
-    )[0];
-}
-
 export function useDeltaRefresh({
   accessToken,
   accountId,
@@ -27,13 +17,40 @@ export function useDeltaRefresh({
   const { latestGameRef } = useRecentGames();
   const inFlightRef = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // 1. Keep a ref of the current titles so we don't need it in the useEffect deps
+  const currentTitlesRef = useRef(trophyTitles);
+
+  // 2. The map to track values
   const lastEarnedRef = useRef<Map<string, number | null>>(new Map());
+
+  // 3. Sync Refs whenever props change
+  useEffect(() => {
+    currentTitlesRef.current = trophyTitles;
+
+    // If we have titles but our Map is empty, initialize it to avoid false positives
+    if (trophyTitles && trophyTitles.length > 0 && lastEarnedRef.current.size === 0) {
+      trophyTitles.forEach((t) => {
+        // Calculate total earned for this title to seed the cache
+        const total = t.earnedTrophies
+          ? t.earnedTrophies.bronze +
+            t.earnedTrophies.silver +
+            t.earnedTrophies.gold +
+            t.earnedTrophies.platinum
+          : 0;
+        lastEarnedRef.current.set(String(t.npCommunicationId), total);
+      });
+      console.log("💧 Delta Cache Hydrated from Context");
+    }
+  }, [trophyTitles]);
+
   useEffect(() => {
     if (!accessToken || !accountId) return;
+
     const performDeltaRefresh = async () => {
       if (inFlightRef.current) return;
-      if (!accessToken || !accountId) return;
 
+      // Use the Ref for the latest game to avoid stale closures
       const latest = latestGameRef.current;
       if (!latest) return;
 
@@ -44,11 +61,6 @@ export function useDeltaRefresh({
           platform: latest.platform,
         },
       ];
-
-      console.log(
-        "🔎 Delta refresh games:",
-        games.map((g) => g.npwr)
-      );
 
       if (games.length === 0) return;
 
@@ -67,23 +79,16 @@ export function useDeltaRefresh({
         const json = await res.json();
 
         const meaningfulChanges = json.games.filter((g: any) => {
-          const npwr = g.npwr;
+          const npwr = String(g.npwr);
           const earned =
             typeof g.trophies?.earned === "number" ? g.trophies.earned : null;
 
           const prevEarned = lastEarnedRef.current.get(npwr) ?? null;
 
-          // ignore unhydrated → unhydrated
-          if (earned === null && prevEarned === null) return false;
-
-          // ignore hydration-only
-          if (prevEarned === null && earned !== null) {
-            lastEarnedRef.current.set(npwr, earned);
-            return false;
-          }
-
-          // real delta
-          if (earned !== prevEarned) {
+          // 4. LOGIC FIX: If we have a new value and it's different, it's a change.
+          // We removed the "ignore hydration" block.
+          if (earned !== null && earned !== prevEarned) {
+            console.log(`📈 Change detected for ${npwr}: ${prevEarned} -> ${earned}`);
             lastEarnedRef.current.set(npwr, earned);
             return true;
           }
@@ -100,14 +105,13 @@ export function useDeltaRefresh({
         inFlightRef.current = false;
       }
     };
+
     const subscription = AppState.addEventListener("change", (nextState) => {
       const prevState = appStateRef.current;
-
       if (prevState.match(/inactive|background/) && nextState === "active") {
         console.log("🔁 App resumed → immediate Tier-1 refresh");
         performDeltaRefresh();
       }
-
       appStateRef.current = nextState;
     });
 
@@ -117,5 +121,6 @@ export function useDeltaRefresh({
       clearInterval(interval);
       subscription.remove();
     };
-  }, [accessToken, accountId, trophyTitles]);
+    // 5. REMOVED trophyTitles from dependency array to keep interval stable
+  }, [accessToken, accountId]);
 }

@@ -87,6 +87,45 @@ async function getServiceAuth() {
   console.log("✅ Service access token refreshed for:", accountId);
   return serviceAuthCache;
 }
+function isExpiredTokenError(err) {
+  if (!err) return false;
+
+  const msg = String(err.message || "");
+  return (
+    msg.includes("Expired token") || msg.includes("expired") || msg.includes("22411164")
+  );
+}
+async function fetchWithAutoRefresh(url) {
+  let auth = await getServiceAuth();
+
+  const headers = {
+    Authorization: `Bearer ${auth.accessToken}`,
+    "Accept-Language": "en-US",
+    "User-Agent": "Mozilla/5.0",
+  };
+
+  try {
+    return await fetchWithFallback(url, headers);
+  } catch (err) {
+    if (isExpiredTokenError(err)) {
+      console.warn("🔑 Access token expired — refreshing");
+
+      // force refresh
+      serviceAuthCache = null;
+      auth = await getServiceAuth();
+
+      const retryHeaders = {
+        Authorization: `Bearer ${auth.accessToken}`,
+        "Accept-Language": "en-US",
+        "User-Agent": "Mozilla/5.0",
+      };
+
+      return await fetchWithFallback(url, retryHeaders);
+    }
+
+    throw err;
+  }
+}
 
 // 3) Fetch helper with legacy fallback for trophy endpoints
 async function fetchWithFallback(url, headers) {
@@ -117,6 +156,8 @@ function mergeTrophies(definitions, progress) {
       ...def,
       earned: user?.earned ?? false,
       earnedDateTime: user?.earnedDateTime ?? null,
+      // 👇 ADD THIS LINE to pass the rarity through
+      trophyEarnedRate: user?.trophyEarnedRate ?? def?.trophyEarnedRate ?? null,
     };
   });
 }
@@ -233,7 +274,7 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
       `/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
 
-    const progressJson = await fetchWithFallback(progressUrl, headers);
+    const progressJson = await fetchWithAutoRefresh(progressUrl);
     const progress = progressJson.trophies ?? [];
 
     // B) DEFINITIONS
@@ -241,7 +282,7 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
       `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}` +
       `/trophyGroups/all/trophies`;
 
-    const defJson = await fetchWithFallback(defUrl, headers);
+    const defJson = await fetchWithAutoRefresh(defUrl);
     const definitions = defJson.trophies ?? [];
 
     // C) MERGE
@@ -293,14 +334,14 @@ app.post("/api/trophies/refresh", async (req, res) => {
           `https://m.np.playstation.com/api/trophy/v1/users/${accountId}` +
           `/npCommunicationIds/${npwr}/trophyGroups/all/trophies`;
 
-        const progressJson = await fetchWithFallback(progressUrl, headers);
+        const progressJson = await fetchWithAutoRefresh(progressUrl);
         const progress = progressJson.trophies ?? [];
 
         const defUrl =
           `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npwr}` +
           `/trophyGroups/all/trophies`;
 
-        const defJson = await fetchWithFallback(defUrl, headers);
+        const defJson = await fetchWithAutoRefresh(defUrl);
         const definitions = defJson.trophies ?? [];
 
         const merged = mergeTrophies(definitions, progress);

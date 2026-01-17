@@ -1,13 +1,21 @@
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Image, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Image, RefreshControl, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TrophyActionSheet from "../../components/trophies/TrophyActionSheet";
 import TrophyCard from "../../components/trophies/TrophyCard";
+import TrophyListHeader, {
+  SortDirection,
+  TrophySortMode,
+} from "../../components/trophies/TrophyListHeader";
 import { PROXY_BASE_URL } from "../../config/endpoints";
 import { useTrophy } from "../../providers/TrophyContext";
 import { useMarkRecentGame } from "../../utils/makeRecent";
 import { normalizeTrophyType } from "../../utils/normalizeTrophy";
 
+const BASE_HEADER_HEIGHT = 56; // Base content height
+
+// Type Definition
 type GameTrophy = {
   trophyId: number;
   trophyName: string;
@@ -16,265 +24,250 @@ type GameTrophy = {
   trophyType: string;
   earned?: boolean;
   earnedDateTime?: string | null;
+  trophyEarnedRate?: string;
+  trophyProgressTargetValue?: string;
+  trophyProgressValue?: string;
 };
 
 export default function GameScreen() {
   const { id: rawId } = useLocalSearchParams();
-  const { trophies, accessToken, accountId } = useTrophy();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
+  const { trophies, accessToken, accountId, refreshSingleGame, refreshAllTrophies } =
+    useTrophy();
   const markRecentGame = useMarkRecentGame();
 
-  const [gameTrophies, setGameTrophies] = useState<GameTrophy[]>([]);
+  const [localTrophies, setLocalTrophies] = useState<GameTrophy[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const { refreshSingleGame, refreshAllTrophies } = useTrophy();
   const [refreshing, setRefreshing] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [justEarnedIds, setJustEarnedIds] = useState<Set<number>>(new Set());
-  const [selectedTrophy, setSelectedTrophy] = useState<{
-    name: string;
-    type: "bronze" | "silver" | "gold" | "platinum";
-  } | null>(null);
 
+  const [justEarnedIds, setJustEarnedIds] = useState<Set<number>>(new Set());
+  const [selectedTrophy, setSelectedTrophy] = useState<any>(null);
+
+  const [searchText, setSearchText] = useState("");
+  const [sortMode, setSortMode] = useState<TrophySortMode>("DEFAULT");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("ASC");
+
+  const prevTrophiesRef = useRef<Map<number, boolean>>(new Map());
   const npwr = Array.isArray(rawId) ? rawId[0] : rawId;
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refreshSingleGame(npwr);
-    await refreshAllTrophies();
-    setRefreshing(false);
-  };
+
+  // 1️⃣ CALCULATE TOTAL HEIGHT
+  const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
+
+  // 🎬 ANIMATION SETUP
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // 2️⃣ UPDATE DIFFCLAMP
+  const diffClamp = useMemo(
+    () => Animated.diffClamp(scrollY, 0, totalHeaderHeight),
+    [scrollY, totalHeaderHeight]
+  );
+
+  const translateY = diffClamp.interpolate({
+    inputRange: [0, totalHeaderHeight],
+    outputRange: [0, -totalHeaderHeight], // Slide completely off-screen
+  });
+
+  // (Keep all your existing useEffects and useMemos exactly as they were...)
+  useEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
+
   const game = useMemo(() => {
     if (!npwr) return null;
     return trophies?.trophyTitles?.find(
       (g: any) => String(g.npCommunicationId) === String(npwr)
     );
   }, [npwr, trophies]);
-  // ---- Reset state when switching games
-  useEffect(() => {
-    setGameTrophies([]);
-    setJustEarnedIds(new Set());
-    setIsInitialLoading(true);
-    setSelectedTrophy(null);
-  }, [npwr]);
-  // ---- Mark recent game (once per game change)
-  useEffect(() => {
-    if (!game) return;
 
-    markRecentGame({
-      npwr: String(game.npCommunicationId),
-      gameName: game.trophyTitleName,
-      platform: game.trophyTitlePlatform,
+  const rawTrophyList: GameTrophy[] = useMemo(() => {
+    if (game?.trophyList && game.trophyList.length > 0) return game.trophyList;
+    return localTrophies;
+  }, [game?.trophyList, localTrophies]);
+
+  const processedTrophies = useMemo(() => {
+    let list = [...rawTrophyList];
+    if (searchText)
+      list = list.filter((t) =>
+        t.trophyName.toLowerCase().includes(searchText.toLowerCase())
+      );
+
+    const dir = sortDirection === "ASC" ? 1 : -1;
+    list.sort((a, b) => {
+      switch (sortMode) {
+        case "NAME":
+          return a.trophyName.localeCompare(b.trophyName) * dir;
+        case "RARITY":
+          const rA = parseFloat(a.trophyEarnedRate ?? "0");
+          const rB = parseFloat(b.trophyEarnedRate ?? "0");
+          return (rA - rB) * dir;
+        case "STATUS":
+          return ((a.earned ? 1 : 0) - (b.earned ? 1 : 0)) * dir;
+        case "DATE_EARNED":
+          const dateA = a.earnedDateTime ? new Date(a.earnedDateTime).getTime() : 0;
+          const dateB = b.earnedDateTime ? new Date(b.earnedDateTime).getTime() : 0;
+          return (dateA - dateB) * dir;
+        default:
+          return (a.trophyId - b.trophyId) * dir;
+      }
     });
-  }, [game, markRecentGame]);
+    return list;
+  }, [rawTrophyList, searchText, sortMode, sortDirection]);
 
-  // ---- Fetch trophies for this game
   useEffect(() => {
-    if (!accountId || !accessToken || !game) {
-      setIsInitialLoading(false); // ✅ SAFETY
+    if (game)
+      markRecentGame({
+        npwr: String(game.npCommunicationId),
+        gameName: game.trophyTitleName,
+        platform: game.trophyTitlePlatform,
+      });
+  }, [game?.npCommunicationId]);
+
+  useEffect(() => {
+    if (processedTrophies.length === 0) return;
+    const nextJustEarned = new Set<number>();
+    processedTrophies.forEach((t) => {
+      const wasEarned = prevTrophiesRef.current.get(t.trophyId);
+      if (wasEarned === false && t.earned) nextJustEarned.add(t.trophyId);
+      prevTrophiesRef.current.set(t.trophyId, !!t.earned);
+    });
+    if (nextJustEarned.size > 0) {
+      setJustEarnedIds(nextJustEarned);
+      setTimeout(() => setJustEarnedIds(new Set()), 3000);
+    }
+  }, [rawTrophyList]);
+
+  useEffect(() => {
+    if (game?.trophyList) {
+      setIsInitialLoading(false);
       return;
     }
-
+    if (!accountId || !accessToken || !game) return;
     const controller = new AbortController();
-    const { signal } = controller;
-
-    if (gameTrophies.length === 0) {
-      setIsInitialLoading(true);
-    } else {
-      setIsRefreshing(true);
-    }
-
     fetch(
-      `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}` +
-        `?gameName=${encodeURIComponent(game.trophyTitleName)}` +
-        `&platform=${encodeURIComponent(game.trophyTitlePlatform)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        signal,
-      }
+      `${PROXY_BASE_URL}/api/trophies/${accountId}/${game.npCommunicationId}?gameName=${encodeURIComponent(game.trophyTitleName)}&platform=${encodeURIComponent(game.trophyTitlePlatform)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal }
     )
       .then((r) => r.json())
       .then((data) => {
-        if (signal.aborted) return;
-
-        const incoming: GameTrophy[] = data.trophies ?? [];
-
-        setGameTrophies((prev) => {
-          if (prev.length === 0) {
-            return incoming;
-          }
-
-          const prevMap = new Map(prev.map((t) => [t.trophyId, t]));
-          const nextJustEarned = new Set<number>();
-
-          const merged = incoming.map((t) => {
-            const old = prevMap.get(t.trophyId);
-
-            if (old && !old.earned && t.earned) {
-              nextJustEarned.add(t.trophyId);
-            }
-
-            if (
-              old &&
-              old.earned === t.earned &&
-              old.earnedDateTime === t.earnedDateTime
-            ) {
-              return old;
-            }
-
-            return t;
-          });
-
-          if (nextJustEarned.size > 0) {
-            setJustEarnedIds(nextJustEarned);
-            setTimeout(() => setJustEarnedIds(new Set()), 2000);
-          }
-
-          return merged;
-        });
+        if (!controller.signal.aborted) setLocalTrophies(data.trophies ?? []);
       })
-      .catch((e) => {
-        if (!signal.aborted) {
-          console.log("❌ GAME TROPHIES FETCH FAILED", e);
-        }
-      })
+      .catch((e) => console.log("Fetch failed", e))
       .finally(() => {
-        if (!signal.aborted) {
-          setIsInitialLoading(false); // 👈 THIS removes the skeleton
-          setIsRefreshing(false);
-        }
+        if (!controller.signal.aborted) setIsInitialLoading(false);
       });
-
     return () => controller.abort();
-  }, [accountId, accessToken, game]);
+  }, [accountId, accessToken, game?.npCommunicationId, game?.trophyList]);
 
-  // ---- Skeleton
-  const TrophySkeleton = () => (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#111",
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 10,
-      }}
-    >
-      <View
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: 6,
-          backgroundColor: "#222",
-          marginRight: 12,
-        }}
-      />
-      <View style={{ flex: 1 }}>
-        <View
-          style={{
-            height: 12,
-            width: "70%",
-            backgroundColor: "#222",
-            borderRadius: 4,
-            marginBottom: 6,
-          }}
-        />
-        <View
-          style={{
-            height: 10,
-            width: "50%",
-            backgroundColor: "#222",
-            borderRadius: 4,
-          }}
-        />
-      </View>
-    </View>
-  );
+  if (!game) return <View style={{ flex: 1, backgroundColor: "black" }} />;
 
-  // ---- Guards (after hooks)
-  if (!npwr) {
-    return (
-      <View>
-        <Text>Missing game id</Text>
-      </View>
-    );
-  }
-
-  if (!game) {
-    return (
-      <View>
-        <Text>Game not found</Text>
-      </View>
-    );
-  }
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshSingleGame(npwr);
+    await refreshAllTrophies();
+    setRefreshing(false);
+  };
 
   return (
-    <>
-      <ScrollView
-        style={{ flex: 1, backgroundColor: "#000" }}
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      {/* 🎬 HEADER */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          paddingTop: insets.top,
+          backgroundColor: "#000",
+          transform: [{ translateY }],
+          height: totalHeaderHeight, // Explicit height
+        }}
+      >
+        <TrophyListHeader
+          onBack={() => navigation.goBack()}
+          onSearch={setSearchText}
+          sortMode={sortMode}
+          onSortChange={setSortMode}
+          sortDirection={sortDirection}
+          onSortDirectionChange={() =>
+            setSortDirection((prev) => (prev === "ASC" ? "DESC" : "ASC"))
+          }
+        />
+      </Animated.View>
+
+      {/* 🎬 SCROLLVIEW */}
+      <Animated.ScrollView
+        contentContainerStyle={{
+          paddingTop: totalHeaderHeight, // Matches total height
+          paddingBottom: 40,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="white" // iOS spinner color
-            colors={["#fff"]} // Android spinner color
+            tintColor="white"
           />
         }
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+        })}
+        scrollEventThrottle={16}
       >
-        <Image
-          source={{ uri: game.trophyTitleIconUrl }}
-          style={{
-            width: 180,
-            height: 180,
-            borderRadius: 12,
-            alignSelf: "center",
-            marginBottom: 16,
-          }}
-        />
+        {/* HERO HEADER */}
+        <View style={{ alignItems: "center", paddingVertical: 20 }}>
+          <Image
+            source={{ uri: game.trophyTitleIconUrl }}
+            style={{ width: 120, height: 120, borderRadius: 12, marginBottom: 12 }}
+          />
+          <Text
+            style={{
+              color: "white",
+              fontSize: 20,
+              fontWeight: "bold",
+              textAlign: "center",
+              paddingHorizontal: 20,
+            }}
+          >
+            {game.trophyTitleName}
+          </Text>
+          <Text style={{ color: "gold", marginTop: 4 }}>{game.progress}% Complete</Text>
+          <Text style={{ color: "#666", fontSize: 12, marginTop: 2 }}>
+            {processedTrophies.length} Trophies
+          </Text>
+        </View>
 
-        <Text
-          style={{
-            color: "white",
-            fontSize: 22,
-            fontWeight: "bold",
-            textAlign: "center",
-          }}
-        >
-          {game.trophyTitleName}
-        </Text>
-
-        <Text style={{ color: "gold", textAlign: "center", marginBottom: 24 }}>
-          {game.progress}% Complete
-        </Text>
-
-        {isInitialLoading &&
-          Array.from({ length: 7 }).map((_, i) => <TrophySkeleton key={i} />)}
-
-        {!isInitialLoading && gameTrophies.length === 0 && (
-          <Text style={{ color: "#999", textAlign: "center" }}>No trophies found.</Text>
+        {isInitialLoading && (
+          <Text style={{ color: "white", textAlign: "center", marginTop: 20 }}>
+            Loading Trophies...
+          </Text>
         )}
 
-        {gameTrophies.map((trophy) => (
-          <TrophyCard
-            key={String(trophy.trophyId)}
-            id={trophy.trophyId}
-            name={trophy.trophyName}
-            description={trophy.trophyDetail}
-            icon={trophy.trophyIconUrl}
-            type={normalizeTrophyType(trophy.trophyType)}
-            earned={!!trophy.earned}
-            earnedAt={trophy.earnedDateTime ?? undefined}
-            justEarned={justEarnedIds.has(trophy.trophyId)}
-            onPress={() =>
-              setSelectedTrophy({
-                name: trophy.trophyName,
-                type: normalizeTrophyType(trophy.trophyType),
-              })
-            }
-          />
-        ))}
-      </ScrollView>
+        <View style={{ paddingHorizontal: 12 }}>
+          {processedTrophies.map((trophy) => (
+            <TrophyCard
+              key={String(trophy.trophyId)}
+              id={trophy.trophyId}
+              name={trophy.trophyName}
+              description={trophy.trophyDetail}
+              icon={trophy.trophyIconUrl}
+              type={normalizeTrophyType(trophy.trophyType)}
+              earned={!!trophy.earned}
+              earnedAt={trophy.earnedDateTime ?? undefined}
+              rarity={trophy.trophyEarnedRate}
+              justEarned={justEarnedIds.has(trophy.trophyId)}
+              onPress={() =>
+                setSelectedTrophy({
+                  name: trophy.trophyName,
+                  type: normalizeTrophyType(trophy.trophyType),
+                })
+              }
+            />
+          ))}
+        </View>
+      </Animated.ScrollView>
 
-      {/* ✅ THIS is where the overlay goes */}
       <TrophyActionSheet
         visible={!!selectedTrophy}
         onClose={() => setSelectedTrophy(null)}
@@ -282,6 +275,6 @@ export default function GameScreen() {
         trophyName={selectedTrophy?.name ?? ""}
         trophyType={selectedTrophy?.type ?? "bronze"}
       />
-    </>
+    </View>
   );
 }

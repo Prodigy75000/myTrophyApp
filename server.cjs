@@ -335,10 +335,8 @@ app.get("/api/user/summary/:accountId", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// ---------------- TROPHIES (LIBRARY + ART MERGE + HYBRID MATCH) ----------------
+// ---------------- TROPHIES (STRICT: PS5 STORE ART vs PS4 TROPHY ICONS) ----------------
 app.get("/api/trophies/:accountId", async (req, res) => {
-  console.log("🚀 ROUTE HIT: /api/trophies/:accountId");
-
   try {
     const accessToken = requireBearer(req, res);
     if (!accessToken) return;
@@ -351,11 +349,10 @@ app.get("/api/trophies/:accountId", async (req, res) => {
       "User-Agent": "Mozilla/5.0",
     };
 
-    // 1. Define URLs
+    // 1. Fetch Data
     const trophyBaseUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/trophyTitles`;
     const gameListBaseUrl = `https://m.np.playstation.com/api/gamelist/v2/users/${accountId}/titles`;
 
-    // 2. Pagination Helper
     const fetchPaginated = async (baseUrl, key) => {
       const allItems = [];
       let offset = 0;
@@ -371,63 +368,55 @@ app.get("/api/trophies/:accountId", async (req, res) => {
       return allItems;
     };
 
-    // 3. Fetch Both
     console.log("⏳ Fetching Trophy List & Game List...");
     const [trophyTitles, gameList] = await Promise.all([
       fetchPaginated(trophyBaseUrl, "trophyTitles"),
       fetchPaginated(gameListBaseUrl, "titles"),
     ]);
-    console.log(`✅ Fetched: ${trophyTitles.length} Trophies | ${gameList.length} Games`);
 
-    // 4. BUILD MAPS (The "Hybrid" Strategy)
+    // 2. Build Art Map
     const artMapById = new Map();
     const artMapByName = new Map();
 
-    // Helper to sanitize names (remove ™, ®, spaces, special chars, lowercase)
     const normalize = (str) => {
       if (!str) return "";
-      return str.toLowerCase().replace(/[^\w\d]/g, ""); // "Tony Hawk's™ 1+2" -> "tonyhawks12"
+      return str.toLowerCase().replace(/[^\w\d]/g, "");
     };
 
     for (const game of gameList) {
-      // A. Extract Best Image
-      // 🎯 FIX: Prioritize 'MASTER' (High-Res Square) instead of Cover Art (Wide/Landscape)
-      // This prevents the "Zoomed In" cropping issue in square cards.
-      let bestArt = game.imageUrl; // Default to standard square
+      // 🛡️ STRICT RULE: Only look for Store Art if it's a PS5 game.
+      // PS5 Store Art is consistently Square (MASTER).
+      // PS4 Store Art is messy (Banners, Portrait) and causes zooming issues.
+      const isPS5 = game.titleId && game.titleId.startsWith("PPSA");
 
-      if (game.concept?.media?.images) {
-        const master = game.concept.media.images.find((img) => img.type === "MASTER");
-        // Fallback to 'icon0' if MASTER is missing, but MASTER is usually the best store art
-        if (master) bestArt = master.url;
-      }
+      if (!isPS5) continue; // SKIP ALL PS4/PS3. They will fall back to Trophy Icons.
+
+      const media = game.concept?.media?.images || [];
+      const master = media.find((img) => img.type === "MASTER")?.url;
+
+      // Use MASTER if available, otherwise nothing.
+      const bestArt = master;
 
       if (!bestArt) continue;
 
-      // B. Map by ID (PPSA/CUSA)
+      // Map it
       if (game.titleId) artMapById.set(game.titleId, bestArt);
-
-      // Also map by concept IDs if available
       if (game.concept?.titleIds) {
         game.concept.titleIds.forEach((id) => artMapById.set(id, bestArt));
       }
-
-      // C. Map by Name (Fallback)
       if (game.name) {
         artMapByName.set(normalize(game.name), bestArt);
       }
     }
 
-    // 5. MERGE
+    // 3. Merge
     let matchCount = 0;
     const enrichedTitles = trophyTitles.map((t) => {
       let storeArt = null;
 
-      // Attempt 1: ID Match (If trophy object has npTitleId)
       if (t.npTitleId) {
         storeArt = artMapById.get(t.npTitleId);
       }
-
-      // Attempt 2: Name Match (If ID failed)
       if (!storeArt && t.trophyTitleName) {
         const cleanName = normalize(t.trophyTitleName);
         storeArt = artMapByName.get(cleanName);
@@ -438,18 +427,22 @@ app.get("/api/trophies/:accountId", async (req, res) => {
       return {
         ...t,
         trophyTitleIconUrl: t.trophyTitleIconUrl,
-        gameArtUrl: storeArt || t.trophyTitleIconUrl, // Store Art > Trophy Icon
+        // PS5 -> Uses Store Art (High Res Square)
+        // PS4 -> Uses Trophy Icon (Standard Square) - NO ZOOMING!
+        gameArtUrl: storeArt || t.trophyTitleIconUrl,
       };
     });
 
-    console.log(`🎨 Artwork Matched: ${matchCount} / ${trophyTitles.length} games`);
+    console.log(
+      `🎨 Artwork Matched (PS5 Only): ${matchCount} / ${trophyTitles.length} games`
+    );
 
     res.json({
       totalItemCount: enrichedTitles.length,
       trophyTitles: enrichedTitles,
     });
   } catch (err) {
-    console.error("🔥 ROUTE ERROR:", err.message);
+    console.error("❌ Library error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

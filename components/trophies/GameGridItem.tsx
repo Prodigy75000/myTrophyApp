@@ -12,7 +12,7 @@ import {
 type Props = {
   id: string;
   art: string;
-  platform: string; // 👈 NEW PROP
+  platform: string;
   progress: number;
   numColumns: number;
 };
@@ -23,6 +23,11 @@ const GameGridItem = ({ id, art, platform, progress, numColumns }: Props) => {
 
   const screenWidth = Dimensions.get("window").width;
   const size = (screenWidth - (numColumns + 1) * 4) / numColumns;
+
+  // 🧠 THE FIX (Same as GameCard)
+  const isPS5 = platform === "PS5";
+  const dynamicResizeMode = isPS5 ? "cover" : "contain";
+  const imageBackgroundColor = isPS5 ? "#1e1e2d" : "#000000";
 
   return (
     <TouchableOpacity
@@ -40,26 +45,29 @@ const GameGridItem = ({ id, art, platform, progress, numColumns }: Props) => {
         marginHorizontal: 2,
         borderRadius: 8,
         overflow: "hidden",
-        backgroundColor: "#1e1e2d",
+        backgroundColor: imageBackgroundColor, // Dynamic Background
         position: "relative",
+        justifyContent: "center", // Center contained images
+        alignItems: "center",
       }}
     >
       <Image
         source={{ uri: art }}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
+        style={{ width: size, height: size }}
+        resizeMode={dynamicResizeMode} // Dynamic Mode
         onLoad={() => setLoaded(true)}
       />
 
-      {/* Dim Overlay */}
-      <View style={styles.overlay} />
+      {/* Dim Overlay (Only needed for PS5 cover art) */}
+      {isPS5 && <View style={styles.overlay} />}
 
-      {/* 🏷️ PLATFORM BADGE (Bottom Left) */}
-      <View style={styles.platformBadge}>
-        <Text style={styles.badgeText}>{platform}</Text>
-      </View>
+      {/* Badges */}
+      {platform ? (
+        <View style={styles.platformBadge}>
+          <Text style={styles.badgeText}>{platform}</Text>
+        </View>
+      ) : null}
 
-      {/* Progress Badge (Bottom Right) */}
       <View style={styles.progressBadge}>
         <Text style={styles.badgeText}>{progress}%</Text>
       </View>

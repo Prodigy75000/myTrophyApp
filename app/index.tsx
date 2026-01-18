@@ -222,7 +222,7 @@ export default function HomeScreen() {
           })}
           scrollEventThrottle={16}
           contentContainerStyle={{
-            paddingTop: totalHeaderHeight + 10,
+            paddingTop: totalHeaderHeight,
             paddingBottom: 20,
             // Add padding for Grid mode to center items if needed
             paddingHorizontal: viewMode === "GRID" ? 2 : 0,

@@ -65,7 +65,6 @@ export default function ProfileDashboard({
 
         <View style={styles.userInfo}>
           <Text style={styles.username}>{username}</Text>
-          <Text style={styles.totalText}>{totalTrophies} Total Trophies</Text>
         </View>
       </View>
 
@@ -90,11 +89,11 @@ const StatItem = ({ icon, count, color }: any) => (
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#151b2b",
-    marginHorizontal: 12,
+    marginHorizontal: 6,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 6,
     borderRadius: 16,
-    padding: 16,
+    padding: 6,
     borderWidth: 1,
     borderColor: "#2a3449",
     shadowColor: "#000",
@@ -106,11 +105,11 @@ const styles = StyleSheet.create({
   profileRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   avatarContainer: {
     position: "relative",
-    marginRight: 14,
+    marginRight: 10,
   },
   avatar: {
     width: 50,
@@ -155,7 +154,7 @@ const styles = StyleSheet.create({
   },
   username: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     marginBottom: 2,
   },

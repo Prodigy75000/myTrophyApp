@@ -16,7 +16,7 @@ type GameCardProps = {
   title: string;
   icon: string;
   art?: string;
-  platform: string; // 👈 NEW PROP
+  platform: string;
   progress: number;
   lastPlayed?: string;
   counts: {
@@ -46,7 +46,16 @@ const GameCard = ({
   const [loadIcon, setLoadIcon] = useState(false);
 
   const displayImage = art || icon;
+  // Ensure consistency
   const IMG_SIZE = 100;
+
+  // 🧠 THE FIX: Determine rendering strategy based on platform
+  const isPS5 = platform === "PS5";
+  // PS5 -> Cover (Fill the square)
+  // PS4/PS3 -> Contain (Fit inside the square, no zooming)
+  const dynamicResizeMode = isPS5 ? "cover" : "contain";
+  // Add a black background for non-PS5 games to letterbox nicely
+  const imageBackgroundColor = isPS5 ? "#2a2a3a" : "#000000";
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -66,19 +75,32 @@ const GameCard = ({
       }
     >
       <View style={styles.cardContainer}>
-        {/* COLUMN 1: Image + Platform Badge */}
+        {/* COLUMN 1: Image + Badge */}
         <View style={{ position: "relative", marginRight: 14 }}>
           {loadIcon ? (
-            <Image
-              source={{ uri: displayImage }}
+            // 🖼️ Image Container for background color
+            <View
               style={{
                 width: IMG_SIZE,
                 height: IMG_SIZE,
                 borderRadius: 8,
+                backgroundColor: imageBackgroundColor, // Dynamic background
+                overflow: "hidden",
+                justifyContent: "center",
+                alignItems: "center",
               }}
-              resizeMode="cover"
-            />
+            >
+              <Image
+                source={{ uri: displayImage }}
+                style={{
+                  width: IMG_SIZE,
+                  height: IMG_SIZE,
+                }}
+                resizeMode={dynamicResizeMode} // 👈 Dynamic Mode
+              />
+            </View>
           ) : (
+            // Placeholder
             <View
               style={{
                 width: IMG_SIZE,
@@ -89,10 +111,12 @@ const GameCard = ({
             />
           )}
 
-          {/* 🏷️ PLATFORM BADGE (Bottom Left) */}
-          <View style={styles.platformBadge}>
-            <Text style={styles.platformText}>{platform}</Text>
-          </View>
+          {/* Badge */}
+          {platform ? (
+            <View style={styles.platformBadge}>
+              <Text style={styles.platformText}>{platform}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* COLUMN 2: Info */}
@@ -137,6 +161,7 @@ const GameCard = ({
   );
 };
 
+// ... StatItem and styles remain exactly the same as before ...
 const StatItem = ({ icon, earned, total, size = 18 }: any) => (
   <View style={{ alignItems: "center" }}>
     <Image
@@ -185,23 +210,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  // ✨ NEW BADGE STYLES
   platformBadge: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(0,0,0,0.8)", // Dark backdrop
-    borderTopRightRadius: 6,
-    borderBottomLeftRadius: 8, // Matches image corner
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    borderRadius: 4,
     paddingVertical: 2,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
   },
   platformText: {
     color: "white",
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "bold",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
 });
 

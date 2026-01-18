@@ -2,17 +2,16 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   Modal,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/* ================= TYPES ================= */
-
-export type TrophySortMode = "DEFAULT" | "DATE_EARNED" | "STATUS" | "RARITY" | "NAME";
+export type TrophySortMode = "DEFAULT" | "NAME" | "RARITY" | "STATUS" | "DATE_EARNED";
 export type SortDirection = "ASC" | "DESC";
 
 type Props = {
@@ -24,8 +23,6 @@ type Props = {
   onSortDirectionChange: () => void;
 };
 
-/* ================= COMPONENT ================= */
-
 export default function TrophyListHeader({
   onBack,
   onSearch,
@@ -34,169 +31,209 @@ export default function TrophyListHeader({
   sortDirection,
   onSortDirectionChange,
 }: Props) {
-  const [query, setQuery] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [isSearchActive, setIsSearchActive] = useState(false);
 
-  const handleChange = (text: string) => {
-    setQuery(text);
-    onSearch(text);
-  };
+  // Helper to render sort options
+  const SortOption = ({ label, value, icon }: any) => (
+    <TouchableOpacity
+      style={[styles.optionRow, sortMode === value && styles.optionSelected]}
+      onPress={() => {
+        onSortChange(value);
+        setShowSortMenu(false);
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={sortMode === value ? "#4da3ff" : "#888"}
+          style={{ marginRight: 12 }}
+        />
+        <Text
+          style={[
+            styles.optionText,
+            sortMode === value && { color: "#4da3ff", fontWeight: "bold" },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
+      {sortMode === value && <Ionicons name="checkmark" size={20} color="#4da3ff" />}
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={styles.safeContainer}>
-      <View style={styles.container}>
-        {/* Back Button */}
-        <TouchableOpacity onPress={onBack} style={styles.iconButton}>
+    <View style={styles.container}>
+      <View style={styles.row}>
+        {/* BACK BUTTON */}
+        <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
 
-        {/* Search */}
+        {/* SEARCH BAR */}
         <View style={styles.searchContainer}>
+          <Ionicons name="search" size={18} color="#666" style={{ marginRight: 8 }} />
           <TextInput
             placeholder="Search trophies..."
             placeholderTextColor="#666"
-            style={styles.searchInput}
-            value={query}
-            onChangeText={handleChange}
+            style={styles.input}
+            onChangeText={onSearch}
+            onFocus={() => setIsSearchActive(true)}
+            onBlur={() => setIsSearchActive(false)}
           />
-          {query.length > 0 && (
-            <TouchableOpacity onPress={() => handleChange("")} style={styles.clearButton}>
-              <Ionicons name="close" size={18} color="#999" />
-            </TouchableOpacity>
-          )}
         </View>
 
-        {/* Direction Toggle */}
-        <TouchableOpacity onPress={onSortDirectionChange} style={styles.iconButton}>
-          <Ionicons
-            name={sortDirection === "ASC" ? "arrow-up" : "arrow-down"}
-            size={20}
-            color="#aaa"
-          />
-        </TouchableOpacity>
-
-        {/* Filter Menu */}
+        {/* SORT BUTTON (Opens Modal) */}
         <TouchableOpacity
-          onPress={() => setFiltersOpen(true)}
-          style={[styles.iconButton, filtersOpen && styles.activeIcon]}
+          onPress={() => setShowSortMenu(true)}
+          style={[
+            styles.iconBtn,
+            sortMode !== "DEFAULT" && { backgroundColor: "rgba(77, 163, 255, 0.1)" },
+          ]}
         >
           <Ionicons
-            name={filtersOpen ? "filter" : "filter-outline"}
-            size={20}
-            color={filtersOpen ? "#4da3ff" : "#aaa"}
+            name="filter" // Changed from "options" for clarity
+            size={22}
+            color={sortMode !== "DEFAULT" ? "#4da3ff" : "white"}
           />
         </TouchableOpacity>
       </View>
 
-      {/* OVERLAY MODAL */}
+      {/* SORT MENU MODAL */}
       <Modal
-        visible={filtersOpen}
-        transparent={true}
+        transparent
+        visible={showSortMenu}
         animationType="fade"
-        onRequestClose={() => setFiltersOpen(false)}
+        onRequestClose={() => setShowSortMenu(false)}
       >
-        <TouchableWithoutFeedback onPress={() => setFiltersOpen(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.dropdownCard}>
-                <Text style={styles.menuHeader}>Sort Trophies By</Text>
-                {[
-                  { key: "DEFAULT", label: "Default Order" },
-                  { key: "DATE_EARNED", label: "Date Earned" },
-                  { key: "STATUS", label: "Status (Earned)" },
-                  { key: "RARITY", label: "Rarity %" },
-                  { key: "NAME", label: "Name (A-Z)" },
-                ].map((item) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[styles.sortRow, sortMode === item.key && styles.selectedRow]}
-                    onPress={() => {
-                      onSortChange(item.key as TrophySortMode);
-                      setFiltersOpen(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.sortText,
-                        sortMode === item.key && styles.selectedText,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
-                    {sortMode === item.key && (
-                      <Ionicons name="checkmark" size={18} color="#4da3ff" />
-                    )}
-                  </TouchableOpacity>
-                ))}
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSortMenu(false)}>
+          <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
+            <Text style={styles.menuHeader}>Sort Trophies</Text>
+
+            <SortOption label="Default Order" value="DEFAULT" icon="list" />
+            <SortOption
+              label="Rarity (Common → Rare)"
+              value="RARITY"
+              icon="diamond-outline"
+            />
+            <SortOption label="Date Earned" value="DATE_EARNED" icon="calendar-outline" />
+            <SortOption label="Earned Status" value="STATUS" icon="checkbox-outline" />
+
+            <View style={styles.divider} />
+
+            {/* 👇 SORT DIRECTION TOGGLE (Moved Inside) */}
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => {
+                onSortDirectionChange();
+                // Optional: Keep menu open or close it?
+                // Closing it feels snappier.
+                setShowSortMenu(false);
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name="swap-vertical"
+                  size={20}
+                  color="white"
+                  style={{ marginRight: 12 }}
+                />
+                <Text style={styles.optionText}>
+                  Order: {sortDirection === "ASC" ? "Ascending ⬆️" : "Descending ⬇️"}
+                </Text>
               </View>
-            </TouchableWithoutFeedback>
+            </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
+        </Pressable>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContainer: { zIndex: 10 },
   container: {
-    height: 56,
-    backgroundColor: "#0A0F1C",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1B2333",
+    gap: 12,
   },
-  iconButton: { padding: 8 },
-  activeIcon: { backgroundColor: "rgba(77, 163, 255, 0.1)", borderRadius: 8 },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#1c1c26",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
   searchContainer: {
     flex: 1,
-    marginHorizontal: 4,
-    justifyContent: "center",
-  },
-  searchInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1c1c26",
     height: 40,
-    backgroundColor: "#1B2333",
-    borderRadius: 8,
+    borderRadius: 20,
     paddingHorizontal: 12,
-    color: "white",
-    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#333",
   },
-  clearButton: { position: "absolute", right: 8 },
+  input: {
+    flex: 1,
+    color: "white",
+    fontSize: 15,
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: 100, // adjust for status bar
-    paddingRight: 12,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
-  dropdownCard: {
-    width: 190,
+  menuContainer: {
+    position: "absolute",
+    right: 16,
+    width: 250,
     backgroundColor: "#151b2b",
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 8,
     borderWidth: 1,
-    borderColor: "#2a3449",
-    paddingVertical: 6,
+    borderColor: "#444",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   menuHeader: {
     color: "#666",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "bold",
-    marginLeft: 16,
-    marginBottom: 6,
-    marginTop: 4,
+    marginLeft: 12,
+    marginVertical: 8,
     textTransform: "uppercase",
   },
-  sortRow: {
+  optionRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  selectedRow: { backgroundColor: "rgba(77, 163, 255, 0.08)" },
-  sortText: { color: "#ccc", fontSize: 14 },
-  selectedText: { color: "white", fontWeight: "600" },
+  optionSelected: {
+    backgroundColor: "rgba(77, 163, 255, 0.1)",
+  },
+  optionText: {
+    color: "white",
+    fontSize: 15,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#333",
+    marginVertical: 4,
+    marginHorizontal: 8,
+  },
 });

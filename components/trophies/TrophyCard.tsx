@@ -11,7 +11,6 @@ type Props = {
   earnedAt?: string;
   rarity?: string;
   justEarned?: boolean;
-  // 👇 NEW PROPS
   progressValue?: string;
   progressTarget?: string;
   onPress: () => void;
@@ -22,6 +21,39 @@ const trophyTypeColors = {
   silver: "#c0c0c0",
   gold: "#ffd700",
   platinum: "#e5e4e2",
+};
+
+// ✨ UPDATED: Rarity Pyramid (Single Tier Highlight)
+const RarityPyramid = ({ rarity }: { rarity: string }) => {
+  const r = parseFloat(rarity);
+
+  // Determine Tier Level (1 = Common, 4 = Ultra Rare)
+  let level = 1;
+  if (r <= 5)
+    level = 4; // Ultra Rare
+  else if (r <= 15)
+    level = 3; // Very Rare
+  else if (r <= 50)
+    level = 2; // Rare
+  else level = 1; // Common
+
+  // Render 4 stacked bars (Top to Bottom)
+  // 🎯 FIX: Used '===' instead of '>=' to light up ONLY the specific bar
+  return (
+    <View style={styles.pyramidContainer}>
+      {/* Tier 4 (Top - Smallest) -> Active if Ultra Rare */}
+      <View style={[styles.pyramidBar, { width: 4, opacity: level === 4 ? 1 : 0.2 }]} />
+
+      {/* Tier 3 -> Active if Very Rare */}
+      <View style={[styles.pyramidBar, { width: 8, opacity: level === 3 ? 1 : 0.2 }]} />
+
+      {/* Tier 2 -> Active if Rare */}
+      <View style={[styles.pyramidBar, { width: 12, opacity: level === 2 ? 1 : 0.2 }]} />
+
+      {/* Tier 1 (Bottom - Widest) -> Active if Common */}
+      <View style={[styles.pyramidBar, { width: 16, opacity: level === 1 ? 1 : 0.2 }]} />
+    </View>
+  );
 };
 
 export default function TrophyCard({
@@ -39,8 +71,6 @@ export default function TrophyCard({
 }: Props) {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // 🧮 CALCULATE PROGRESS
-  // Only show tracking if we have a target and it's not earned yet
   const showProgress = progressValue && progressTarget;
   let progressPercent = 0;
 
@@ -89,7 +119,6 @@ export default function TrophyCard({
             backgroundColor,
             borderColor,
             borderWidth: 1,
-            // If earned, full opacity. If unearned, dimmed slightly
             opacity: earned ? 1 : 0.7,
           },
         ]}
@@ -104,31 +133,38 @@ export default function TrophyCard({
             {description}
           </Text>
 
-          {/* 📊 PROGRESS BAR ROW */}
-          {showProgress ? (
-            <View style={styles.progressRow}>
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
-                />
-              </View>
-              <Text style={styles.progressText}>
-                {progressValue} / {progressTarget}
-              </Text>
-            </View>
-          ) : (
-            // STANDARD META ROW (Date & Rarity)
-            <View style={styles.metaRow}>
-              {earnedAt ? (
+          {/* BOTTOM ROW */}
+          <View style={styles.bottomRow}>
+            {/* LEFT: Status / Progress */}
+            <View style={styles.statusContainer}>
+              {showProgress ? (
+                <View style={styles.progressWrapper}>
+                  <View style={styles.progressBarBg}>
+                    <View
+                      style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {progressValue} / {progressTarget}
+                  </Text>
+                </View>
+              ) : earnedAt ? (
                 <Text style={styles.earnedDate}>
                   {new Date(earnedAt).toLocaleDateString()}
                 </Text>
               ) : (
                 <Text style={styles.lockedText}>Locked</Text>
               )}
-              {rarity && <Text style={styles.rarity}>{rarity}%</Text>}
             </View>
-          )}
+
+            {/* RIGHT: Rarity Pyramid */}
+            {rarity && (
+              <View style={styles.rarityWrapper}>
+                <RarityPyramid rarity={rarity} />
+                <Text style={styles.rarity}>{rarity}%</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View
@@ -158,6 +194,7 @@ const styles = StyleSheet.create({
   },
   info: {
     flex: 1,
+    justifyContent: "space-between",
   },
   name: {
     color: "white",
@@ -168,13 +205,42 @@ const styles = StyleSheet.create({
   description: {
     color: "#aaa",
     fontSize: 12,
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  metaRow: {
+  bottomRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     marginTop: 2,
   },
+  statusContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  // Progress
+  progressWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 4,
+    backgroundColor: "#333",
+    borderRadius: 2,
+    marginRight: 8,
+    maxWidth: 100,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#4da3ff",
+  },
+  progressText: {
+    color: "#ccc",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  // Text
   earnedDate: {
     color: "#4caf50",
     fontSize: 11,
@@ -185,37 +251,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: "italic",
   },
+  // Rarity
+  rarityWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   rarity: {
-    color: "#888",
+    color: "#ccc",
     fontSize: 11,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  // Pyramid Styles
+  pyramidContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+  },
+  pyramidBar: {
+    height: 2,
+    backgroundColor: "#fff",
+    borderRadius: 1,
   },
   typeBadge: {
     width: 4,
-    height: "80%",
+    height: "60%",
     borderRadius: 2,
-    marginLeft: 8,
-  },
-  // ✨ PROGRESS BAR STYLES
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  progressBarBg: {
-    flex: 1,
-    height: 4,
-    backgroundColor: "#333",
-    borderRadius: 2,
-    marginRight: 8,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#4da3ff", // PlayStation Blue
-  },
-  progressText: {
-    color: "#ccc",
-    fontSize: 10,
-    fontWeight: "bold",
+    marginLeft: 10,
+    alignSelf: "center",
   },
 });

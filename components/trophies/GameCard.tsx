@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
 
+// Trophy icons
 const trophyIcons = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
@@ -30,6 +31,7 @@ type GameCardProps = {
     earnedGold: number;
     earnedPlatinum: number;
   };
+  justUpdated?: boolean; // 👈 NEW PROP
 };
 
 const GameCard = ({
@@ -41,28 +43,46 @@ const GameCard = ({
   progress,
   lastPlayed,
   counts,
+  justUpdated,
 }: GameCardProps) => {
   const router = useRouter();
   const [loadIcon, setLoadIcon] = useState(false);
 
-  const displayImage = art || icon;
-  // Ensure consistency
-  const IMG_SIZE = 100;
+  // Animation Value (0 = No highlight, 1 = Highlighted)
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // 🧠 THE FIX: Determine rendering strategy based on platform
-  const isPS5 = platform === "PS5";
-  // PS5 -> Cover (Fill the square)
-  // PS4/PS3 -> Contain (Fit inside the square, no zooming)
-  const dynamicResizeMode = isPS5 ? "cover" : "contain";
-  // Add a black background for non-PS5 games to letterbox nicely
-  const imageBackgroundColor = isPS5 ? "#2a2a3a" : "#000000";
+  const displayImage = art || icon;
+  const IMG_SIZE = 124;
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setLoadIcon(true);
-    }, 50);
+    const t = setTimeout(() => setLoadIcon(true), 50);
     return () => clearTimeout(t);
   }, []);
+
+  // ⚡ TRIGGER ANIMATION ON UPDATE
+  useEffect(() => {
+    if (justUpdated) {
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false, // Color interpolation needs false
+        }),
+        Animated.delay(2000),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [justUpdated]);
+
+  // Interpolate Border Color
+  const borderColor = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 0.8)"], // Transparent to Gold
+  });
 
   return (
     <TouchableOpacity
@@ -74,44 +94,30 @@ const GameCard = ({
         })
       }
     >
-      <View style={styles.cardContainer}>
+      <Animated.View style={[styles.cardContainer, { borderColor, borderWidth: 1 }]}>
         {/* COLUMN 1: Image + Badge */}
         <View style={{ position: "relative", marginRight: 14 }}>
           {loadIcon ? (
-            // 🖼️ Image Container for background color
-            <View
+            <Image
+              source={{ uri: displayImage }}
               style={{
-                width: IMG_SIZE,
-                height: IMG_SIZE,
+                width: 100,
+                height: 100,
                 borderRadius: 8,
-                backgroundColor: imageBackgroundColor, // Dynamic background
-                overflow: "hidden",
-                justifyContent: "center",
-                alignItems: "center",
               }}
-            >
-              <Image
-                source={{ uri: displayImage }}
-                style={{
-                  width: IMG_SIZE,
-                  height: IMG_SIZE,
-                }}
-                resizeMode={dynamicResizeMode} // 👈 Dynamic Mode
-              />
-            </View>
+              resizeMode="cover"
+            />
           ) : (
-            // Placeholder
             <View
               style={{
-                width: IMG_SIZE,
-                height: IMG_SIZE,
+                width: 100,
+                height: 100,
                 borderRadius: 8,
                 backgroundColor: "#2a2a3a",
               }}
             />
           )}
 
-          {/* Badge */}
           {platform ? (
             <View style={styles.platformBadge}>
               <Text style={styles.platformText}>{platform}</Text>
@@ -156,12 +162,11 @@ const GameCard = ({
         <View style={styles.circleColumn}>
           <ProgressCircle progress={progress} size={42} strokeWidth={3} />
         </View>
-      </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 };
 
-// ... StatItem and styles remain exactly the same as before ...
 const StatItem = ({ icon, earned, total, size = 18 }: any) => (
   <View style={{ alignItems: "center" }}>
     <Image
@@ -180,10 +185,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#1e1e2d",
     borderRadius: 12,
-    padding: 8,
+    padding: 1, // Adjusted padding for border
     marginVertical: 1,
     width: "100%",
     alignItems: "center",
+    // Base border is handled by Animated.View props
   },
   infoColumn: {
     flex: 1,

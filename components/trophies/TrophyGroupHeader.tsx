@@ -17,6 +17,7 @@ type Props = {
     gold: number;
     platinum: number;
   };
+  progress?: number; // 👈 New Prop for Sony Point-Based %
 };
 
 const icons = {
@@ -31,13 +32,24 @@ export default function TrophyGroupHeader({
   isBaseGame,
   counts,
   earnedCounts,
+  progress,
 }: Props) {
-  // Calculate Group Completion %
-  const total = counts.bronze + counts.silver + counts.gold + counts.platinum;
-  const earned =
+  // 1. Calculate Count-Based stats for display text (e.g. "5/10 Trophies")
+  const totalCount = counts.bronze + counts.silver + counts.gold + counts.platinum;
+  const earnedCount =
     earnedCounts.bronze + earnedCounts.silver + earnedCounts.gold + earnedCounts.platinum;
-  const percent = total > 0 ? Math.round((earned / total) * 100) : 0;
-  const isCompleted = percent === 100;
+
+  // 2. Determine Display Percentage
+  // If 'progress' (Points) is passed from parent, use it.
+  // Otherwise fall back to count (Simple Math).
+  const displayPercent =
+    progress !== undefined
+      ? progress
+      : totalCount > 0
+        ? Math.round((earnedCount / totalCount) * 100)
+        : 0;
+
+  const isCompleted = displayPercent === 100;
 
   return (
     <View style={styles.container}>
@@ -46,14 +58,14 @@ export default function TrophyGroupHeader({
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, isBaseGame && styles.baseGameTitle]}>{title}</Text>
           <Text style={styles.subtitle}>
-            {isBaseGame ? "Base Game" : "Add-on Pack"} • {earned}/{total} Trophies
+            {isBaseGame ? "Base Game" : "DLC"} • {earnedCount}/{totalCount} Trophies
           </Text>
         </View>
 
         {/* PERCENTAGE BADGE */}
         <View style={[styles.badge, isCompleted && styles.completedBadge]}>
           <Text style={[styles.badgeText, isCompleted && { color: "#000" }]}>
-            {percent}%
+            {displayPercent}%
           </Text>
         </View>
       </View>

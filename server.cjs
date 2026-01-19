@@ -207,7 +207,7 @@ app.get("/api/profile/:username", async (req, res) => {
   }
 });
 
-// ---------------- GAME TROPHIES ----------------
+// ---------------- GAME TROPHIES (Detail) ----------------
 app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
   const { gameName, platform } = req.query;
 
@@ -218,16 +218,14 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
     const { accountId, npCommunicationId } = req.params;
 
     // 1. Define URLs
-    // A) User Progress (PS5 = Rich Data / PS4 = Sparse Data)
     const progressUrl = `https://m.np.playstation.com/api/trophy/v1/users/${accountId}/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies?limit=1000`;
-    // B) Definitions (Critical for PS4, sometimes fails for PS5)
     const defUrl = `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}/trophyGroups/all/trophies`;
-    // C) Groups (DLC Names)
     const groupsUrl = `https://m.np.playstation.com/api/trophy/v1/npCommunicationIds/${npCommunicationId}/trophyGroups`;
-    // 2. Parallel Fetch with ERROR HANDLING ON ALL
+
+    // 2. Parallel Fetch
     const [progressData, defData, groupData] = await Promise.all([
       fetchWithAutoRefresh(progressUrl).catch((e) => ({ trophies: [] })),
-      fetchWithAutoRefresh(defUrl).catch((e) => ({ trophies: [] })), // 👈 NOW ALLOWED TO FAIL (PS5 Fix)
+      fetchWithAutoRefresh(defUrl).catch((e) => ({ trophies: [] })),
       fetchWithAutoRefresh(groupsUrl).catch((e) => ({ trophyGroups: [] })),
     ]);
 
@@ -238,40 +236,73 @@ app.get("/api/trophies/:accountId/:npCommunicationId", async (req, res) => {
     let finalTrophies = [];
 
     // 3. SMART MERGE STRATEGY
-    // Check if 'progress' already has names (PS5 Games usually do)
     const isRichProgress = progress.length > 0 && !!progress[0].trophyName;
 
     if (isRichProgress) {
       // 🟢 CASE A: PS5 (Rich Data)
-      // We don't need definitions, the user data has everything!
       finalTrophies = progress.map((p) => ({
         ...p,
-        earned: !!p.earnedDateTime, // Ensure boolean exists
-        // PS5 data usually has trophyGroupId, icon, detail, etc.
+        earned: !!p.earnedDateTime,
       }));
       console.log(`[PS5 DETECTED] Using rich progress for ${npCommunicationId}`);
     } else {
-      // 🔵 CASE B: PS4 (Sparse Data)
-      // We MUST merge with definitions because progress is missing names/icons
+      // 🔵 CASE B: PS4/Sparse (Merge Required)
       if (definitions.length === 0) {
         console.warn(`[WARN] No definitions found for sparse game ${npCommunicationId}`);
-        // If both failed, we return what we have (likely empty)
         finalTrophies = progress;
       } else {
         const progressMap = new Map();
         for (const p of progress) progressMap.set(p.trophyId, p);
 
+        // 🕵️ DEBUG: Log RAW keys from Sony for the first item
+        if (progress.length > 0) {
+          console.log("[DEBUG] Raw Progress Item Keys:", Object.keys(progress[0]));
+        }
+        const rawProgressItem = progress.find(
+          (p) => p.trophyProgressValue || p.trophyProgressTargetValue
+        );
+        if (rawProgressItem) {
+          console.log(
+            `[DEBUG] Found Raw Progress on Trophy ID ${rawProgressItem.trophyId}:`,
+            `${rawProgressItem.trophyProgressValue} / ${rawProgressItem.trophyProgressTargetValue}`
+          );
+        } else {
+          console.log("[DEBUG] No progress values found in User Progress array.");
+        }
         finalTrophies = definitions.map((def) => {
           const userP = progressMap.get(def.trophyId);
+
+          // 1. Get Target: Try User object first, fallback to Definition (The Missing Link!)
+          const target =
+            userP?.trophyProgressTargetValue ?? def?.trophyProgressTargetValue ?? null;
+
+          // 2. Get Value: Try User object first.
+          //    If missing but we have a target, default to "0" (Fixes "null" value for 0% progress)
+          const value = userP?.trophyProgressValue ?? (target ? "0" : null);
+
           return {
             ...def,
             earned: userP?.earned ?? false,
             earnedDateTime: userP?.earnedDateTime ?? null,
-            trophyEarnedRate: userP?.trophyEarnedRate ?? def.trophyEarnedRate,
+            trophyEarnedRate: userP?.trophyEarnedRate ?? def.trophyEarnedRate ?? null,
+
+            // 👇 Use our calculated variables
+            trophyProgressValue: value,
+            trophyProgressTargetValue: target,
+            trophyProgressRate: userP?.trophyProgressRate ?? null,
           };
         });
-        console.log(`[PS4 DETECTED] Merged definitions for ${npCommunicationId}`);
+        console.log(`[PS4/SPARSE] Merged definitions for ${npCommunicationId}`);
       }
+    }
+
+    // 🕵️ FINAL DEBUG CHECK (After merge is done)
+    const sampleWithProgress = finalTrophies.find((t) => t.trophyProgressTargetValue);
+    console.log(`[DEBUG] Final Check - Has Progress Data? ${!!sampleWithProgress}`);
+    if (sampleWithProgress) {
+      console.log(
+        `[DEBUG] Example: ${sampleWithProgress.trophyName}: ${sampleWithProgress.trophyProgressValue} / ${sampleWithProgress.trophyProgressTargetValue}`
+      );
     }
 
     // 4. Return

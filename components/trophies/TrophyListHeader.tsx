@@ -113,11 +113,7 @@ export default function TrophyListHeader({
             <Text style={styles.menuHeader}>Sort Trophies</Text>
 
             <SortOption label="Default Order" value="DEFAULT" icon="list" />
-            <SortOption
-              label="Rarity (Common → Rare)"
-              value="RARITY"
-              icon="diamond-outline"
-            />
+            <SortOption label="Rarity" value="RARITY" icon="diamond-outline" />
             <SortOption label="Date Earned" value="DATE_EARNED" icon="calendar-outline" />
             <SortOption label="Earned Status" value="STATUS" icon="checkbox-outline" />
 

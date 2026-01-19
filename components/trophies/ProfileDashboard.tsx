@@ -27,15 +27,13 @@ export default function ProfileDashboard({
   username,
   avatarUrl,
   isPlus,
-  totalTrophies,
   counts,
   level,
 }: Props) {
   return (
     <View style={styles.container}>
-      {/* 1. TOP ROW */}
-      <View style={styles.profileRow}>
-        {/* AVATAR + PLUS BADGE */}
+      {/* LEFT: Avatar & Identity */}
+      <View style={styles.leftSection}>
         <View style={styles.avatarContainer}>
           <Image
             source={{
@@ -44,18 +42,14 @@ export default function ProfileDashboard({
             style={styles.avatar}
           />
 
-          {/* 🛡️ SAFE PLUS OVERLAY: Top-Left Corner */}
+          {/* Plus Badge (Top Left) */}
           {isPlus && (
             <View style={styles.plusOverlay}>
-              <Ionicons
-                name="add"
-                size={10}
-                color="black"
-                style={{ fontWeight: "900" }}
-              />
+              <Ionicons name="add" size={8} color="black" style={{ fontWeight: "900" }} />
             </View>
           )}
 
+          {/* Level Badge (Bottom Right) */}
           {level ? (
             <View style={styles.levelBadge}>
               <Text style={styles.levelText}>{level}</Text>
@@ -63,12 +57,12 @@ export default function ProfileDashboard({
           ) : null}
         </View>
 
-        <View style={styles.userInfo}>
-          <Text style={styles.username}>{username}</Text>
-        </View>
+        <Text style={styles.username} numberOfLines={1}>
+          {username}
+        </Text>
       </View>
 
-      {/* 2. STATS ROW */}
+      {/* RIGHT: Compact Trophies */}
       <View style={styles.statsRow}>
         <StatItem icon={icons.platinum} count={counts.platinum} color="#E5E4E2" />
         <StatItem icon={icons.gold} count={counts.gold} color="#FFD700" />
@@ -89,98 +83,92 @@ const StatItem = ({ icon, count, color }: any) => (
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#151b2b",
-    marginHorizontal: 6,
-    marginTop: 4,
-    marginBottom: 6,
-    borderRadius: 16,
-    padding: 6,
+    marginHorizontal: 8,
+    marginTop: 0,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "#2a3449",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  profileRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  leftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1, // Allow username to take available space
+    marginRight: 8,
   },
   avatarContainer: {
     position: "relative",
     marginRight: 10,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 36, // Smaller Avatar (was 50)
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#222",
   },
-  // ✨ THE NEW PLUS BADGE (Looks official, but is 100% CSS)
   plusOverlay: {
     position: "absolute",
     top: -2,
     left: -2,
-    backgroundColor: "#FFD700", // PlayStation Gold
-    width: 16,
-    height: 16,
-    borderRadius: 8, // Circle
+    backgroundColor: "#FFD700",
+    width: 12, // Smaller badge
+    height: 12,
+    borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#151b2b", // Matches background to create a "cutout" effect
+    borderWidth: 1,
+    borderColor: "#151b2b",
     zIndex: 2,
   },
   levelBadge: {
     position: "absolute",
-    bottom: -4,
-    right: -4,
+    bottom: -2,
+    right: -2,
     backgroundColor: "#DAA520",
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    borderRadius: 6,
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
     borderWidth: 1,
     borderColor: "#151b2b",
     zIndex: 2,
   },
   levelText: {
     color: "#000",
-    fontSize: 10,
+    fontSize: 8, // Smaller text
     fontWeight: "bold",
-  },
-  userInfo: {
-    flex: 1,
   },
   username: {
     color: "white",
-    fontSize: 16,
+    fontSize: 14, // Slightly smaller font
     fontWeight: "bold",
-    marginBottom: 2,
-  },
-  totalText: {
-    color: "#888",
-    fontSize: 12,
+    flexShrink: 1, // Allows truncation if name is too long
   },
   statsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: "#0a0f1c",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
+    alignItems: "center",
+    gap: 10, // Space between trophy counts
   },
   statItem: {
+    flexDirection: "row", // 👈 Side-by-side Icon + Number
     alignItems: "center",
-    width: 50,
   },
   statIcon: {
-    width: 24,
-    height: 24,
-    marginBottom: 4,
+    width: 14, // Mini Icons
+    height: 14,
+    marginRight: 4,
   },
   statCount: {
-    fontSize: 15,
+    fontSize: 12, // Mini Numbers
     fontWeight: "bold",
   },
 });

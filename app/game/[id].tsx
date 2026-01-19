@@ -22,7 +22,6 @@ import { useTrophy } from "../../providers/TrophyContext";
 import { useMarkRecentGame } from "../../utils/makeRecent";
 import { normalizeTrophyType } from "../../utils/normalizeTrophy";
 
-// 🎯 FIX: Harmonized Height (was 56, now 60 to match index.tsx)
 const HEADER_HEIGHT = 60;
 
 const trophyIcons = {
@@ -32,7 +31,6 @@ const trophyIcons = {
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
-// ... Types (GameTrophy, TrophyGroup) remain the same ...
 type GameTrophy = {
   trophyId: number;
   trophyName: string;
@@ -86,13 +84,9 @@ export default function GameScreen() {
   });
 
   useEffect(() => {
-    // 🧹 FORCE CLEAR STATE ON ID CHANGE
-    // This prevents "Flash of Old Content" when navigating between games
     setLocalTrophies([]);
     setTrophyGroups([]);
     setIsInitialLoading(true);
-
-    // Reset Scroll Position
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     scrollY.setValue(0);
   }, [npwr]);
@@ -101,7 +95,6 @@ export default function GameScreen() {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // 1. Get Game from Context
   const game = useMemo(() => {
     if (!npwr) return null;
     return trophies?.trophyTitles?.find(
@@ -109,7 +102,7 @@ export default function GameScreen() {
     );
   }, [npwr, trophies]);
 
-  // Watchdog & Fetch Effects (Same as before)...
+  // Watchdog
   useEffect(() => {
     if (!game) return;
     const localEarnedCount = localTrophies.filter((t) => t.earned).length;
@@ -137,7 +130,6 @@ export default function GameScreen() {
     }
   }, [game, localTrophies]);
 
-  // List processing (Same as before)...
   const rawTrophyList: GameTrophy[] = useMemo(() => {
     if (game?.trophyList && game.trophyList.length > 0) return game.trophyList;
     return localTrophies;
@@ -224,17 +216,22 @@ export default function GameScreen() {
     return () => controller.abort();
   }, [accountId, accessToken, game?.npCommunicationId, game?.trophyList]);
 
+  // 🔥 UPDATED LOGIC: Perfect Sync for Single List games
   const groupedData = useMemo(() => {
     if (sortMode !== "DEFAULT") return null;
+
+    // 1. Organize data into buckets
     const groups: any[] = [];
     const groupMap = new Map();
     trophyGroups.forEach((g) => groupMap.set(g.trophyGroupId, g));
     const buckets = new Map<string, typeof processedTrophies>();
+
     processedTrophies.forEach((t) => {
       const gid = (t as any).trophyGroupId ?? "default";
       if (!buckets.has(gid)) buckets.set(gid, []);
       buckets.get(gid)?.push(t);
     });
+
     const keys = Array.from(buckets.keys());
     const hasDefault = keys.includes("default");
     const sortedKeys = keys.sort((a, b) => {
@@ -242,32 +239,77 @@ export default function GameScreen() {
       if (b === "default") return 1;
       return a.localeCompare(b, undefined, { numeric: true });
     });
+
+    // 🧠 CHECK: Is this a simple game with NO DLC?
+    // If we only have 1 bucket (Base Game), then the progress MUST match the Header (Sony %).
+    // Note: We check keys.length because trophyGroups might be empty initially.
+    const isSingleListGame = sortedKeys.length === 1;
+
     sortedKeys.forEach((key) => {
       const list = buckets.get(key) || [];
       const info = groupMap.get(key);
       let isBaseGame = false;
       let name = info?.trophyGroupName;
-      if (key === "default") {
-        isBaseGame = true;
-        name = name || "Base Game";
-      } else if (!hasDefault && key === "001") {
+
+      if (key === "default" || (!hasDefault && key === "001")) {
         isBaseGame = true;
         name = name || "Base Game";
       } else {
         isBaseGame = false;
         name = name || `Add-on Pack ${key}`;
       }
+
       const counts = { bronze: 0, silver: 0, gold: 0, platinum: 0 };
       const earnedCounts = { bronze: 0, silver: 0, gold: 0, platinum: 0 };
+
+      // Manual Point Calculation vars
+      let totalPoints = 0;
+      let earnedPoints = 0;
+      // 🏆 PLATINUM = 0 points for group completion math.
+      // This ensures 100% completion logic works nicely for lists.
+      const POINTS: Record<string, number> = {
+        bronze: 15,
+        silver: 30,
+        gold: 90,
+        platinum: 0,
+      };
+
       list.forEach((t: any) => {
         const type = normalizeTrophyType(t.trophyType);
         counts[type]++;
-        if (t.earned) earnedCounts[type]++;
+        totalPoints += POINTS[type] || 0;
+
+        if (t.earned) {
+          earnedCounts[type]++;
+          earnedPoints += POINTS[type] || 0;
+        }
       });
-      groups.push({ id: key, name, isBaseGame, trophies: list, counts, earnedCounts });
+
+      let progress = 0;
+
+      // 🎯 THE FIX:
+      if (isSingleListGame && isBaseGame && game?.progress !== undefined) {
+        // If it's the ONLY list, trust Sony's official number (e.g. 15%).
+        // This guarantees it matches the Game Card & Header.
+        progress = game.progress;
+      } else {
+        // If we have DLCs, we MUST calculate manually because Sony doesn't give "DLC %".
+        // We use the "Platinum = 0" weighting for best accuracy.
+        progress = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+      }
+
+      groups.push({
+        id: key,
+        name,
+        isBaseGame,
+        trophies: list,
+        counts,
+        earnedCounts,
+        progress, // 👈 Perfect sync for single games, accurate math for DLCs
+      });
     });
     return groups;
-  }, [processedTrophies, trophyGroups, sortMode]);
+  }, [processedTrophies, trophyGroups, sortMode, game]);
 
   if (!game) return <View style={{ flex: 1, backgroundColor: "black" }} />;
 
@@ -288,7 +330,6 @@ export default function GameScreen() {
           right: 0,
           zIndex: 100,
           paddingTop: insets.top,
-          // Harmonized with index.tsx (you can change to #0a0b0fff if you want color match too)
           backgroundColor: "#000",
           transform: [{ translateY }],
           height: totalHeaderHeight,
@@ -321,23 +362,16 @@ export default function GameScreen() {
         })}
         scrollEventThrottle={16}
       >
-        {/* 🔥 HERO HEADER */}
+        {/* HERO HEADER */}
         <View style={styles.heroContainer}>
-          {/* WRAPPER FOR BADGE POSITIONING */}
           <View style={styles.iconWrapper}>
-            {/* 🖼️ IMAGE CONTAINER (Black background) */}
             <View style={styles.gameIconContainer}>
               <Image
                 source={{ uri: game.trophyTitleIconUrl }}
                 style={{ width: "100%", height: "100%" }}
-                // ✅ FIX: Use 'cover' for PS5, 'contain' for PS4 (same logic as GameCard)
-                // For simplicity here, we can stick to 'contain' + black BG as it's the safest global header style
-                // Or use dynamic logic if you passed 'platform' into a prop.
                 resizeMode="contain"
               />
             </View>
-
-            {/* 🏷️ FLOATING BADGE */}
             {game.trophyTitlePlatform && (
               <View style={styles.platformBadge}>
                 <Text style={styles.platformText}>{game.trophyTitlePlatform}</Text>
@@ -388,7 +422,6 @@ export default function GameScreen() {
         )}
 
         <View style={{ paddingHorizontal: 12 }}>
-          {/* Grouped vs Flat List Logic */}
           {sortMode === "DEFAULT" && groupedData
             ? groupedData.map((group) => (
                 <View key={group.id}>
@@ -397,6 +430,7 @@ export default function GameScreen() {
                     isBaseGame={group.isBaseGame}
                     counts={group.counts}
                     earnedCounts={group.earnedCounts}
+                    progress={group.progress} // 👈 Correct Progress Passed
                   />
                   {group.trophies.map((trophy: any) => (
                     <TrophyCard
@@ -410,6 +444,8 @@ export default function GameScreen() {
                       earnedAt={trophy.earnedDateTime ?? undefined}
                       rarity={trophy.trophyEarnedRate}
                       justEarned={justEarnedIds.has(trophy.trophyId)}
+                      progressValue={trophy.trophyProgressValue}
+                      progressTarget={trophy.trophyProgressTargetValue}
                       onPress={() =>
                         setSelectedTrophy({
                           name: trophy.trophyName,
@@ -478,7 +514,6 @@ const styles = StyleSheet.create({
     width: 148,
     height: 148,
   },
-  // Replaces old gameIcon
   gameIconContainer: {
     width: "100%",
     height: "100%",

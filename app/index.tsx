@@ -2,10 +2,10 @@ import { useNavigation } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { SortDirection, SortMode, ViewMode } from "../components/HeaderActionBar"; // 👈 Import new type
+import type { SortDirection, SortMode, ViewMode } from "../components/HeaderActionBar";
 import HeaderActionBar from "../components/HeaderActionBar";
 import GameCard from "../components/trophies/GameCard";
-import GameGridItem from "../components/trophies/GameGridItem"; // 👈 Import new component
+import GameGridItem from "../components/trophies/GameGridItem";
 import ProfileDashboard from "../components/trophies/ProfileDashboard";
 import { PROXY_BASE_URL } from "../config/endpoints";
 import { useTrophy } from "../providers/TrophyContext";
@@ -16,6 +16,7 @@ export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");
   const { trophies, accountId, accessToken, refreshAllTrophies } = useTrophy();
   const [refreshing, setRefreshing] = useState(false);
+
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
@@ -26,15 +27,64 @@ export default function HomeScreen() {
   } | null>(null);
   const [level, setLevel] = useState<number>(1);
 
-  // Sorting State
+  // Sorting / View State
   const [sortMode, setSortMode] = useState<SortMode>("LAST_PLAYED");
   const [sortDirection, setSortDirection] = useState<SortDirection>("DESC");
-
-  // 1. VIEW MODE STATE (List vs Grid)
   const [viewMode, setViewMode] = useState<ViewMode>("LIST");
-  const [gridColumns, setGridColumns] = useState(3); // Default to 3 columns
+  const [gridColumns, setGridColumns] = useState(3);
 
-  // ... (Keep existing useEffect for profile fetching) ...
+  // ⚡ WATCHDOG STATE: Tracks games that just updated
+  const [justUpdatedIds, setJustUpdatedIds] = useState<Set<string>>(new Set());
+  // Store previous counts to detect changes
+  const prevCountsRef = useRef<Map<string, number>>(new Map());
+
+  // Watchdog Effect
+  useEffect(() => {
+    if (!trophies?.trophyTitles) return;
+
+    const newUpdates = new Set<string>();
+    let hasUpdates = false;
+
+    trophies.trophyTitles.forEach((game: any) => {
+      const id = game.npCommunicationId;
+      const currentTotal =
+        game.earnedTrophies.bronze +
+        game.earnedTrophies.silver +
+        game.earnedTrophies.gold +
+        game.earnedTrophies.platinum;
+
+      const prevTotal = prevCountsRef.current.get(id);
+
+      // Detect Increase (Only if we had a previous value, so it doesn't flash on first load)
+      if (prevTotal !== undefined && currentTotal > prevTotal) {
+        newUpdates.add(id);
+        hasUpdates = true;
+      }
+
+      // Update ref for next time
+      prevCountsRef.current.set(id, currentTotal);
+    });
+
+    if (hasUpdates) {
+      // Add new IDs to the set
+      setJustUpdatedIds((prev) => {
+        const next = new Set(prev);
+        newUpdates.forEach((id) => next.add(id));
+        return next;
+      });
+
+      // Remove them after 3 seconds
+      setTimeout(() => {
+        setJustUpdatedIds((prev) => {
+          const next = new Set(prev);
+          newUpdates.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 3000);
+    }
+  }, [trophies]);
+
+  // Fetch Profile & Level ... (Existing code)
   useEffect(() => {
     if (!accountId || !accessToken) return;
     fetch(`${PROXY_BASE_URL}/api/user/profile/${accountId}`, {
@@ -61,7 +111,8 @@ export default function HomeScreen() {
       .catch((err) => console.log("Summary fetch failed:", err));
   }, [accountId, accessToken]);
 
-  // ... (Keep existing stats calculation) ...
+  const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
+
   const userStats = useMemo(() => {
     if (!trophies?.trophyTitles) return null;
     return trophies.trophyTitles.reduce(
@@ -81,7 +132,6 @@ export default function HomeScreen() {
     );
   }, [trophies]);
 
-  const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
   const scrollY = useRef(new Animated.Value(0)).current;
   const diffClamp = useMemo(
     () => Animated.diffClamp(scrollY, 0, totalHeaderHeight),
@@ -92,7 +142,6 @@ export default function HomeScreen() {
     outputRange: [0, -totalHeaderHeight],
   });
 
-  // Filter/Sort logic
   const filteredTrophies = React.useMemo(() => {
     if (!trophies?.trophyTitles) return [];
     return trophies.trophyTitles.filter((game: any) =>
@@ -118,56 +167,64 @@ export default function HomeScreen() {
     });
   }, [filteredTrophies, sortMode, sortDirection]);
 
-  // 2. RENDER ITEM LOGIC
+  // 2️⃣ MERGED RENDER ITEM
   const renderItem = React.useCallback(
     ({ item }: { item: any }) => {
-      // Common data extraction
-      const progress = typeof item.progress === "number" ? item.progress : 0;
+      const progress = item.progress;
       const art = item.gameArtUrl || item.trophyTitleIconUrl;
-      const platform = item.trophyTitlePlatform || ""; // 👈 Extract Platform
+      const isJustUpdated = justUpdatedIds.has(item.npCommunicationId);
+
+      // 👻 GHOST EFFECT: Mute games with 0% progress
+      const wrapperStyle = progress === 0 ? { opacity: 0.5 } : { opacity: 1 };
 
       // A) GRID VIEW
       if (viewMode === "GRID") {
         return (
-          <GameGridItem
-            id={item.npCommunicationId}
-            art={art}
-            platform={platform}
-            progress={progress}
-            numColumns={gridColumns}
-          />
+          <View style={wrapperStyle}>
+            <GameGridItem
+              id={item.npCommunicationId}
+              art={art}
+              platform={item.trophyTitlePlatform}
+              progress={progress}
+              numColumns={gridColumns}
+              justUpdated={isJustUpdated} // 👈 PASS TRIGGER
+            />
+          </View>
         );
       }
 
-      // B) LIST VIEW (Existing)
+      // B) LIST VIEW
       return (
-        <GameCard
-          id={item.npCommunicationId}
-          title={item.trophyTitleName}
-          icon={item.trophyTitleIconUrl}
-          art={item.gameArtUrl || undefined}
-          platform={platform} // 👈 Pass it
-          progress={progress}
-          lastPlayed={item.lastUpdatedDateTime}
-          counts={{
-            total:
-              item.definedTrophies.bronze +
-              item.definedTrophies.silver +
-              item.definedTrophies.gold +
-              item.definedTrophies.platinum,
-            bronze: item.definedTrophies.bronze,
-            silver: item.definedTrophies.silver,
-            gold: item.definedTrophies.gold,
-            platinum: item.definedTrophies.platinum,
-            earnedBronze: item.earnedTrophies.bronze,
-            earnedSilver: item.earnedTrophies.silver,
-            earnedGold: item.earnedTrophies.gold,
-            earnedPlatinum: item.earnedTrophies.platinum,
-          }}
-        />
+        <View style={wrapperStyle}>
+          <GameCard
+            id={item.npCommunicationId}
+            title={item.trophyTitleName}
+            icon={item.trophyTitleIconUrl}
+            art={item.gameArtUrl || undefined}
+            platform={item.trophyTitlePlatform}
+            progress={progress}
+            lastPlayed={item.lastUpdatedDateTime}
+            counts={{
+              total:
+                item.definedTrophies.bronze +
+                item.definedTrophies.silver +
+                item.definedTrophies.gold +
+                item.definedTrophies.platinum,
+              bronze: item.definedTrophies.bronze,
+              silver: item.definedTrophies.silver,
+              gold: item.definedTrophies.gold,
+              platinum: item.definedTrophies.platinum,
+              earnedBronze: item.earnedTrophies.bronze,
+              earnedSilver: item.earnedTrophies.silver,
+              earnedGold: item.earnedTrophies.gold,
+              earnedPlatinum: item.earnedTrophies.platinum,
+            }}
+            justUpdated={isJustUpdated} // 👈 PASS TRIGGER
+          />
+        </View>
       );
     },
-    [viewMode, gridColumns]
+    [viewMode, gridColumns, justUpdatedIds] // Add dependency
   );
 
   return (
@@ -194,7 +251,6 @@ export default function HomeScreen() {
           onSortDirectionChange={() =>
             setSortDirection((prev) => (prev === "ASC" ? "DESC" : "ASC"))
           }
-          // 👇 PASS VIEW MODE PROPS
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />
@@ -202,14 +258,11 @@ export default function HomeScreen() {
 
       {trophies && trophies.trophyTitles ? (
         <Animated.FlatList
-          // ⚠️ KEY PROP is crucial for changing numColumns dynamically
           key={viewMode === "GRID" ? `grid-${gridColumns}` : "list"}
           data={sortedTrophies}
           keyExtractor={(item) => String(item.npCommunicationId)}
           renderItem={renderItem}
-          // 👇 DYNAMIC COLUMNS
           numColumns={viewMode === "GRID" ? gridColumns : 1}
-          // Optional: Add column wrapper style if needed for grid spacing
           columnWrapperStyle={viewMode === "GRID" ? { paddingHorizontal: 0 } : undefined}
           refreshing={refreshing}
           onRefresh={async () => {
@@ -222,13 +275,12 @@ export default function HomeScreen() {
           })}
           scrollEventThrottle={16}
           contentContainerStyle={{
-            paddingTop: totalHeaderHeight,
+            paddingTop: totalHeaderHeight + 10,
             paddingBottom: 20,
-            // Add padding for Grid mode to center items if needed
             paddingHorizontal: viewMode === "GRID" ? 2 : 0,
           }}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
           windowSize={5}
           removeClippedSubviews
           ListHeaderComponent={
@@ -237,7 +289,6 @@ export default function HomeScreen() {
                 username={profile?.onlineId ?? accountId ?? "Loading..."}
                 avatarUrl={profile?.avatarUrl}
                 isPlus={profile?.isPlus}
-                totalTrophies={userStats.total}
                 counts={{
                   bronze: userStats.bronze,
                   silver: userStats.silver,
@@ -245,6 +296,7 @@ export default function HomeScreen() {
                   platinum: userStats.platinum,
                 }}
                 level={level > 1 ? level : undefined}
+                totalTrophies={0}
               />
             ) : null
           }

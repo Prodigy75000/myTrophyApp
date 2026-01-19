@@ -101,8 +101,8 @@ const GameCard = ({
             <Image
               source={{ uri: displayImage }}
               style={{
-                width: 100,
-                height: 100,
+                width: 124,
+                height: 124,
                 borderRadius: 8,
               }}
               resizeMode="cover"

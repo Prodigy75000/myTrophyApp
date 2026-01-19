@@ -450,6 +450,7 @@ export default function GameScreen() {
                         setSelectedTrophy({
                           name: trophy.trophyName,
                           type: normalizeTrophyType(trophy.trophyType),
+                          iconUrl: trophy.trophyIconUrl,
                         })
                       }
                     />
@@ -472,6 +473,7 @@ export default function GameScreen() {
                     setSelectedTrophy({
                       name: trophy.trophyName,
                       type: normalizeTrophyType(trophy.trophyType),
+                      iconUrl: trophy.trophyIconUrl,
                     })
                   }
                 />
@@ -485,6 +487,7 @@ export default function GameScreen() {
         gameName={game.trophyTitleName}
         trophyName={selectedTrophy?.name ?? ""}
         trophyType={selectedTrophy?.type ?? "bronze"}
+        trophyIconUrl={selectedTrophy?.iconUrl}
       />
     </View>
   );

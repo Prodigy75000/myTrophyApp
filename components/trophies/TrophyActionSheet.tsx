@@ -10,13 +10,7 @@ type Props = {
   gameName: string;
   trophyName: string;
   trophyType: "bronze" | "silver" | "gold" | "platinum";
-};
-
-const trophyTypeIcon = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  trophyIconUrl?: string; // 👈 This fixes the red squiggly line!
 };
 
 export default function TrophyActionSheet({
@@ -25,10 +19,9 @@ export default function TrophyActionSheet({
   gameName,
   trophyName,
   trophyType,
+  trophyIconUrl,
 }: Props) {
   const insets = useSafeAreaInsets();
-
-  // 🧠 MEMORY STATE: Remembers details even after props are cleared
   const [activeGuide, setActiveGuide] = useState<{
     game: string;
     trophy: string;
@@ -36,10 +29,7 @@ export default function TrophyActionSheet({
   } | null>(null);
 
   const handleWatchGuide = () => {
-    // 1. Save details to local memory BEFORE closing
     setActiveGuide({ game: gameName, trophy: trophyName, mode: "VIDEO" });
-
-    // 2. Close the sheet (which wipes the parent props)
     onClose();
   };
 
@@ -56,7 +46,6 @@ export default function TrophyActionSheet({
 
   return (
     <>
-      {/* 🟢 SMART MODAL: Uses local 'activeGuide' state, not volatile props */}
       <SmartGuideModal
         visible={!!activeGuide}
         onClose={() => setActiveGuide(null)}
@@ -65,79 +54,64 @@ export default function TrophyActionSheet({
         mode={activeGuide?.mode ?? null}
       />
 
-      {/* 🔴 ACTION SHEET */}
       <Modal
         transparent
-        animationType="fade"
+        animationType="slide"
         visible={visible}
         onRequestClose={onClose}
         statusBarTranslucent={true}
       >
         <View style={styles.overlay}>
+          {/* Backdrop */}
           <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
 
-          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 10 }]}>
-            {/* HEADER */}
-            <View style={styles.header}>
-              <Image
-                source={trophyTypeIcon[trophyType]}
-                resizeMode="contain"
-                style={styles.icon}
-              />
-              <Text style={styles.title} numberOfLines={2}>
-                {trophyName}
-              </Text>
+          {/* Compact Sheet */}
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
+            {/* Visual Drag Handle */}
+            <View style={styles.dragHandle} />
+
+            <View style={styles.container}>
+              {/* 1. LEFT: Big Trophy Art (72px) for Art Lovers */}
+              <View style={styles.imageContainer}>
+                <Image
+                  source={{ uri: trophyIconUrl }}
+                  resizeMode="cover"
+                  style={styles.largeIcon}
+                />
+              </View>
+
+              {/* 2. CENTER: Info */}
+              <View style={styles.textColumn}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {trophyName}
+                </Text>
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {gameName}
+                </Text>
+              </View>
+
+              {/* 3. RIGHT: 3 Compact Actions */}
+              <View style={styles.actionsRow}>
+                <ActionButton
+                  icon="logo-youtube"
+                  color="#FF0000"
+                  bg="rgba(255, 0, 0, 0.15)"
+                  onPress={handleWatchGuide}
+                />
+                <ActionButton
+                  icon="book"
+                  color="#4da3ff"
+                  bg="rgba(77, 163, 255, 0.15)"
+                  onPress={handleReadGuide}
+                />
+                <ActionButton
+                  icon="logo-google"
+                  color="#aaa"
+                  bg="rgba(255, 255, 255, 0.1)"
+                  onPress={handleGoogleSearch}
+                />
+              </View>
             </View>
-
-            <View style={styles.divider} />
-
-            {/* 📺 WATCH VIDEO */}
-            <Pressable
-              onPress={handleWatchGuide}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View
-                style={[styles.iconBox, { backgroundColor: "rgba(255, 0, 0, 0.15)" }]}
-              >
-                <Ionicons name="logo-youtube" size={20} color="#FF0000" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={styles.actionText}>Watch Video Guide</Text>
-                <Text style={styles.subText}>Find best tutorial on YouTube</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#666" />
-            </Pressable>
-
-            {/* 📖 READ GUIDE */}
-            <Pressable
-              onPress={handleReadGuide}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View
-                style={[styles.iconBox, { backgroundColor: "rgba(77, 163, 255, 0.15)" }]}
-              >
-                <Ionicons name="book" size={20} color="#4da3ff" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={styles.actionText}>Read Guide</Text>
-                <Text style={styles.subText}>PSNProfiles • TrueAchievements</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#666" />
-            </Pressable>
-
-            {/* 🔍 GOOGLE FALLBACK */}
-            <Pressable
-              onPress={handleGoogleSearch}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View style={[styles.iconBox, { backgroundColor: "#222" }]}>
-                <Ionicons name="logo-google" size={20} color="#aaa" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={[styles.actionText, { color: "#aaa" }]}>Google Search</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#444" />
-            </Pressable>
           </View>
         </View>
       </Modal>
@@ -145,81 +119,102 @@ export default function TrophyActionSheet({
   );
 }
 
+// Compact Button Helper
+const ActionButton = ({
+  icon,
+  color,
+  bg,
+  onPress,
+}: {
+  icon: any;
+  color: string;
+  bg: string;
+  onPress: () => void;
+}) => (
+  <Pressable
+    onPress={onPress}
+    style={({ pressed }) => [styles.actionBtn, { backgroundColor: pressed ? color : bg }]}
+  >
+    {({ pressed }) => <Ionicons name={icon} size={18} color={pressed ? "#fff" : color} />}
+  </Pressable>
+);
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "flex-end",
   },
-  sheetContainer: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+  sheet: {
     backgroundColor: "#151b2b",
-    borderRadius: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
     borderColor: "#2a3449",
-    paddingTop: 8,
-    paddingHorizontal: 8,
+    width: "100%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
-    elevation: 10,
+    elevation: 20,
   },
-  header: {
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#2a3449",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  container: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
-  icon: {
-    width: 28,
-    height: 28,
+  imageContainer: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5,
+    marginRight: 14,
+  },
+  largeIcon: {
+    width: 100, // Big icon request
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: "#000",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  textColumn: {
+    flex: 1,
+    justifyContent: "center",
     marginRight: 12,
   },
   title: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
-    flex: 1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#2a3449",
-    marginBottom: 8,
-    marginHorizontal: 12,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
     marginBottom: 4,
+    lineHeight: 20,
   },
-  actionPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  textColumn: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  actionText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  subText: {
+  subtitle: {
     color: "#888",
     fontSize: 12,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionBtn: {
+    width: 36, // Compact circles
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

@@ -67,6 +67,10 @@ export default function GameScreen() {
   const [sortMode, setSortMode] = useState<TrophySortMode>("DEFAULT");
   const [sortDirection, setSortDirection] = useState<"ASC" | "DESC">("ASC");
 
+  // 🔽 COLLAPSE STATE
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
+
   const prevTrophiesRef = useRef<Map<number, boolean>>(new Map());
   const npwr = Array.isArray(rawId) ? rawId[0] : rawId;
 
@@ -87,6 +91,11 @@ export default function GameScreen() {
     setLocalTrophies([]);
     setTrophyGroups([]);
     setIsInitialLoading(true);
+
+    // Reset collapse state on new game load
+    setCollapsedGroups(new Set());
+    setHasInitializedCollapse(false);
+
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     scrollY.setValue(0);
   }, [npwr]);
@@ -216,7 +225,6 @@ export default function GameScreen() {
     return () => controller.abort();
   }, [accountId, accessToken, game?.npCommunicationId, game?.trophyList]);
 
-  // 🔥 UPDATED LOGIC: Perfect Sync for Single List games
   const groupedData = useMemo(() => {
     if (sortMode !== "DEFAULT") return null;
 
@@ -240,9 +248,6 @@ export default function GameScreen() {
       return a.localeCompare(b, undefined, { numeric: true });
     });
 
-    // 🧠 CHECK: Is this a simple game with NO DLC?
-    // If we only have 1 bucket (Base Game), then the progress MUST match the Header (Sony %).
-    // Note: We check keys.length because trophyGroups might be empty initially.
     const isSingleListGame = sortedKeys.length === 1;
 
     sortedKeys.forEach((key) => {
@@ -262,11 +267,8 @@ export default function GameScreen() {
       const counts = { bronze: 0, silver: 0, gold: 0, platinum: 0 };
       const earnedCounts = { bronze: 0, silver: 0, gold: 0, platinum: 0 };
 
-      // Manual Point Calculation vars
       let totalPoints = 0;
       let earnedPoints = 0;
-      // 🏆 PLATINUM = 0 points for group completion math.
-      // This ensures 100% completion logic works nicely for lists.
       const POINTS: Record<string, number> = {
         bronze: 15,
         silver: 30,
@@ -286,15 +288,9 @@ export default function GameScreen() {
       });
 
       let progress = 0;
-
-      // 🎯 THE FIX:
       if (isSingleListGame && isBaseGame && game?.progress !== undefined) {
-        // If it's the ONLY list, trust Sony's official number (e.g. 15%).
-        // This guarantees it matches the Game Card & Header.
         progress = game.progress;
       } else {
-        // If we have DLCs, we MUST calculate manually because Sony doesn't give "DLC %".
-        // We use the "Platinum = 0" weighting for best accuracy.
         progress = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
       }
 
@@ -305,11 +301,43 @@ export default function GameScreen() {
         trophies: list,
         counts,
         earnedCounts,
-        progress, // 👈 Perfect sync for single games, accurate math for DLCs
+        progress,
       });
     });
     return groups;
   }, [processedTrophies, trophyGroups, sortMode, game]);
+
+  // ⚡ AUTO COLLAPSE LOGIC
+  useEffect(() => {
+    // 1. WAIT for data (Fixes the bug where it runs too early on empty lists)
+    if (!groupedData || groupedData.length === 0 || hasInitializedCollapse) {
+      return;
+    }
+
+    const initialCollapsed = new Set<string>();
+
+    groupedData.forEach((g) => {
+      // 2. Simple Logic: If 100%, collapse it.
+      if (g.progress === 100) {
+        initialCollapsed.add(g.id);
+      }
+    });
+
+    setCollapsedGroups(initialCollapsed);
+    setHasInitializedCollapse(true); // Now we lock it
+  }, [groupedData, hasInitializedCollapse]);
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
 
   if (!game) return <View style={{ flex: 1, backgroundColor: "black" }} />;
 
@@ -362,7 +390,6 @@ export default function GameScreen() {
         })}
         scrollEventThrottle={16}
       >
-        {/* HERO HEADER */}
         <View style={styles.heroContainer}>
           <View style={styles.iconWrapper}>
             <View style={styles.gameIconContainer}>
@@ -421,42 +448,50 @@ export default function GameScreen() {
           </Text>
         )}
 
-        <View style={{ paddingHorizontal: 12 }}>
+        <View style={{ paddingHorizontal: 0 }}>
           {sortMode === "DEFAULT" && groupedData
-            ? groupedData.map((group) => (
-                <View key={group.id}>
-                  <TrophyGroupHeader
-                    title={group.name}
-                    isBaseGame={group.isBaseGame}
-                    counts={group.counts}
-                    earnedCounts={group.earnedCounts}
-                    progress={group.progress} // 👈 Correct Progress Passed
-                  />
-                  {group.trophies.map((trophy: any) => (
-                    <TrophyCard
-                      key={String(trophy.trophyId)}
-                      id={trophy.trophyId}
-                      name={trophy.trophyName}
-                      description={trophy.trophyDetail}
-                      icon={trophy.trophyIconUrl}
-                      type={normalizeTrophyType(trophy.trophyType)}
-                      earned={!!trophy.earned}
-                      earnedAt={trophy.earnedDateTime ?? undefined}
-                      rarity={trophy.trophyEarnedRate}
-                      justEarned={justEarnedIds.has(trophy.trophyId)}
-                      progressValue={trophy.trophyProgressValue}
-                      progressTarget={trophy.trophyProgressTargetValue}
-                      onPress={() =>
-                        setSelectedTrophy({
-                          name: trophy.trophyName,
-                          type: normalizeTrophyType(trophy.trophyType),
-                          iconUrl: trophy.trophyIconUrl,
-                        })
-                      }
+            ? groupedData.map((group) => {
+                const isCollapsed = collapsedGroups.has(group.id);
+                return (
+                  <View key={group.id}>
+                    <TrophyGroupHeader
+                      title={group.name}
+                      isBaseGame={group.isBaseGame}
+                      counts={group.counts}
+                      earnedCounts={group.earnedCounts}
+                      progress={group.progress}
+                      collapsed={isCollapsed}
+                      onToggle={() => toggleGroup(group.id)}
                     />
-                  ))}
-                </View>
-              ))
+
+                    {/* Conditionally Render Trophies */}
+                    {!isCollapsed &&
+                      group.trophies.map((trophy: any) => (
+                        <TrophyCard
+                          key={String(trophy.trophyId)}
+                          id={trophy.trophyId}
+                          name={trophy.trophyName}
+                          description={trophy.trophyDetail}
+                          icon={trophy.trophyIconUrl}
+                          type={normalizeTrophyType(trophy.trophyType)}
+                          earned={!!trophy.earned}
+                          earnedAt={trophy.earnedDateTime ?? undefined}
+                          rarity={trophy.trophyEarnedRate}
+                          justEarned={justEarnedIds.has(trophy.trophyId)}
+                          progressValue={trophy.trophyProgressValue}
+                          progressTarget={trophy.trophyProgressTargetValue}
+                          onPress={() =>
+                            setSelectedTrophy({
+                              name: trophy.trophyName,
+                              type: normalizeTrophyType(trophy.trophyType),
+                              iconUrl: trophy.trophyIconUrl,
+                            })
+                          }
+                        />
+                      ))}
+                  </View>
+                );
+              })
             : processedTrophies.map((trophy) => (
                 <TrophyCard
                   key={String(trophy.trophyId)}

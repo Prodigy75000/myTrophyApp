@@ -1,5 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Props = {
   title: string;
@@ -17,7 +18,10 @@ type Props = {
     gold: number;
     platinum: number;
   };
-  progress?: number; // 👈 New Prop for Sony Point-Based %
+  progress?: number;
+  // 👇 NEW PROPS
+  collapsed: boolean;
+  onToggle: () => void;
 };
 
 const icons = {
@@ -33,15 +37,13 @@ export default function TrophyGroupHeader({
   counts,
   earnedCounts,
   progress,
+  collapsed,
+  onToggle,
 }: Props) {
-  // 1. Calculate Count-Based stats for display text (e.g. "5/10 Trophies")
   const totalCount = counts.bronze + counts.silver + counts.gold + counts.platinum;
   const earnedCount =
     earnedCounts.bronze + earnedCounts.silver + earnedCounts.gold + earnedCounts.platinum;
 
-  // 2. Determine Display Percentage
-  // If 'progress' (Points) is passed from parent, use it.
-  // Otherwise fall back to count (Simple Math).
   const displayPercent =
     progress !== undefined
       ? progress
@@ -52,7 +54,7 @@ export default function TrophyGroupHeader({
   const isCompleted = displayPercent === 100;
 
   return (
-    <View style={styles.container}>
+    <TouchableOpacity style={styles.container} onPress={onToggle} activeOpacity={0.7}>
       {/* HEADER ROW */}
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
@@ -62,20 +64,28 @@ export default function TrophyGroupHeader({
           </Text>
         </View>
 
-        {/* PERCENTAGE BADGE */}
-        <View style={[styles.badge, isCompleted && styles.completedBadge]}>
-          <Text style={[styles.badgeText, isCompleted && { color: "#000" }]}>
-            {displayPercent}%
-          </Text>
+        {/* RIGHT SIDE: Badge + Chevron */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={[styles.badge, isCompleted && styles.completedBadge]}>
+            <Text style={[styles.badgeText, isCompleted && { color: "#000" }]}>
+              {displayPercent}%
+            </Text>
+          </View>
+
+          <Ionicons
+            name={collapsed ? "chevron-down" : "chevron-up"}
+            size={20}
+            color="#888"
+          />
         </View>
       </View>
 
-      {/* STATS ROW (Mini) */}
+      {/* STATS ROW (Hide if collapsed, or keep visible? Usually nicer to keep visible summary) */}
+      {/* Keeping summary visible even when collapsed allows quick checking */}
       <View style={styles.statsRow}>
         <Stat icon={icons.bronze} earned={earnedCounts.bronze} total={counts.bronze} />
         <Stat icon={icons.silver} earned={earnedCounts.silver} total={counts.silver} />
         <Stat icon={icons.gold} earned={earnedCounts.gold} total={counts.gold} />
-        {/* Only show Platinum if the DLC/Game actually has one */}
         {counts.platinum > 0 && (
           <Stat
             icon={icons.platinum}
@@ -84,7 +94,7 @@ export default function TrophyGroupHeader({
           />
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -99,13 +109,13 @@ const Stat = ({ icon, earned, total }: any) => (
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#151b2b", // Distinct header bg
+    backgroundColor: "#151b2b",
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginTop: 16,
     marginBottom: 8,
     borderLeftWidth: 4,
-    borderLeftColor: "#4da3ff", // Accent color line
+    borderLeftColor: "#4da3ff",
     borderRadius: 4,
   },
   headerRow: {
@@ -120,7 +130,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   baseGameTitle: {
-    fontSize: 17, // Base game slightly larger
+    fontSize: 17,
     color: "#fff",
   },
   subtitle: {
@@ -139,7 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a3449",
   },
   completedBadge: {
-    backgroundColor: "#4caf50", // Green when done
+    backgroundColor: "#4caf50",
   },
   badgeText: {
     color: "white",

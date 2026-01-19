@@ -182,13 +182,13 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    padding: 8,
+    marginBottom: 3,
     alignItems: "center",
   },
   icon: {
-    width: 50,
-    height: 50,
+    width: 80,
+    height: 80,
     borderRadius: 4,
     marginRight: 12,
   },
@@ -198,13 +198,14 @@ const styles = StyleSheet.create({
   },
   name: {
     color: "white",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "bold",
     marginBottom: 2,
   },
   description: {
     color: "#aaa",
     fontSize: 12,
+    minHeight: 28,
     marginBottom: 8,
   },
   bottomRow: {

@@ -13,7 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type SortMode = "LAST_PLAYED" | "TITLE" | "PROGRESS";
 export type SortDirection = "ASC" | "DESC";
-export type ViewMode = "LIST" | "GRID"; // 👈 NEW TYPE
+export type ViewMode = "LIST" | "GRID";
+export type FilterMode = "ALL" | "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
 
 type Props = {
   onMenuPress: () => void;
@@ -22,10 +23,10 @@ type Props = {
   onSortChange: (mode: SortMode) => void;
   sortDirection: SortDirection;
   onSortDirectionChange: () => void;
-
-  // 👇 NEW PROPS
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  filterMode: FilterMode;
+  onFilterChange: (mode: FilterMode) => void;
 };
 
 export default function HeaderActionBar({
@@ -37,12 +38,38 @@ export default function HeaderActionBar({
   onSortDirectionChange,
   viewMode,
   onViewModeChange,
+  filterMode,
+  onFilterChange,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchText, setSearchText] = useState("");
 
-  // Helper to render sort options
+  const handleSearch = (text: string) => {
+    setSearchText(text);
+    onLocalSearch(text);
+  };
+
+  const handleClearSearch = () => {
+    setSearchText("");
+    onLocalSearch("");
+  };
+
+  // Helper to get short label for the sort button
+  const getSortLabel = () => {
+    switch (sortMode) {
+      case "TITLE":
+        return "Name";
+      case "PROGRESS":
+        return "Prog";
+      case "LAST_PLAYED":
+      default:
+        return "Recent";
+    }
+  };
+
   const SortOption = ({ label, value, icon }: any) => (
     <TouchableOpacity
       style={[styles.optionRow, sortMode === value && styles.optionSelected]}
@@ -71,6 +98,37 @@ export default function HeaderActionBar({
     </TouchableOpacity>
   );
 
+  const FilterOption = ({ label, value, icon }: any) => (
+    <TouchableOpacity
+      style={[styles.optionRow, filterMode === value && styles.optionSelected]}
+      onPress={() => {
+        onFilterChange(value);
+        setShowFilterMenu(false);
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Ionicons
+          name={icon}
+          size={20}
+          color={filterMode === value ? "#4da3ff" : "#888"}
+          style={{ marginRight: 12 }}
+        />
+        <Text
+          style={[
+            styles.optionText,
+            filterMode === value && { color: "#4da3ff", fontWeight: "bold" },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
+      {filterMode === value && <Ionicons name="checkmark" size={20} color="#4da3ff" />}
+    </TouchableOpacity>
+  );
+
+  const isFilterActive = filterMode !== "ALL";
+  const isSortActive = sortMode !== "LAST_PLAYED";
+
   return (
     <View style={styles.container}>
       <View style={styles.row}>
@@ -86,18 +144,27 @@ export default function HeaderActionBar({
             placeholder="Search games..."
             placeholderTextColor="#666"
             style={styles.input}
-            onChangeText={onLocalSearch}
+            value={searchText}
+            onChangeText={handleSearch}
             onFocus={() => setIsSearchActive(true)}
             onBlur={() => setIsSearchActive(false)}
           />
+          {searchText.length > 0 && (
+            <TouchableOpacity
+              onPress={handleClearSearch}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={18} color="#888" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* 1. VIEW TOGGLE BUTTON (Grid/List) */}
+        {/* 1. VIEW MODE */}
         <TouchableOpacity
           onPress={() => onViewModeChange(viewMode === "LIST" ? "GRID" : "LIST")}
           style={[
             styles.iconBtn,
-            { marginRight: 0 }, // Adjust spacing
+            { marginRight: 0 },
             viewMode === "GRID" && { backgroundColor: "rgba(77, 163, 255, 0.1)" },
           ]}
         >
@@ -108,23 +175,79 @@ export default function HeaderActionBar({
           />
         </TouchableOpacity>
 
-        {/* 2. FILTER BUTTON (Opens Modal) */}
+        {/* 2. FILTER BUTTON (With Badge) */}
+        <TouchableOpacity
+          onPress={() => setShowFilterMenu(true)}
+          style={[
+            styles.iconBtn,
+            { marginRight: 0 },
+            isFilterActive && { backgroundColor: "rgba(77, 163, 255, 0.1)" },
+          ]}
+        >
+          <View>
+            <Ionicons
+              name="filter"
+              size={20}
+              color={isFilterActive ? "#4da3ff" : "white"}
+            />
+            {/* 🔴 ACTIVE BADGE */}
+            {isFilterActive && <View style={styles.badge} />}
+          </View>
+        </TouchableOpacity>
+
+        {/* 3. SORT BUTTON (With Tiny Label) */}
         <TouchableOpacity
           onPress={() => setShowSortMenu(true)}
           style={[
             styles.iconBtn,
-            sortMode !== "LAST_PLAYED" && { backgroundColor: "rgba(77, 163, 255, 0.1)" },
+            isSortActive && { backgroundColor: "rgba(77, 163, 255, 0.1)" },
           ]}
         >
-          <Ionicons
-            name="filter"
-            size={22}
-            color={sortMode !== "LAST_PLAYED" ? "#4da3ff" : "white"}
-          />
+          <View style={{ alignItems: "center", justifyContent: "center" }}>
+            <Ionicons
+              name="swap-vertical"
+              size={16} // Reduced size slightly to fit text
+              color={isSortActive ? "#4da3ff" : "white"}
+            />
+            {/* 🏷️ TINY LABEL */}
+            <Text style={[styles.tinyLabel, isSortActive && { color: "#4da3ff" }]}>
+              {getSortLabel()}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* SORT MENU MODAL (Existing code...) */}
+      {/* 🟢 FILTER MENU MODAL */}
+      <Modal
+        transparent
+        visible={showFilterMenu}
+        animationType="fade"
+        onRequestClose={() => setShowFilterMenu(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterMenu(false)}>
+          <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
+            <Text style={styles.menuHeader}>Filter Games</Text>
+            <FilterOption label="All Games" value="ALL" icon="apps-outline" />
+            <FilterOption
+              label="In Progress"
+              value="IN_PROGRESS"
+              icon="play-circle-outline"
+            />
+            <FilterOption
+              label="Completed (100%)"
+              value="COMPLETED"
+              icon="trophy-outline"
+            />
+            <FilterOption
+              label="Not Started (0%)"
+              value="NOT_STARTED"
+              icon="ellipse-outline"
+            />
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* 🔵 SORT MENU MODAL */}
       <Modal
         transparent
         visible={showSortMenu}
@@ -134,13 +257,10 @@ export default function HeaderActionBar({
         <Pressable style={styles.modalOverlay} onPress={() => setShowSortMenu(false)}>
           <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
             <Text style={styles.menuHeader}>Sort Games</Text>
-
             <SortOption label="Last Played" value="LAST_PLAYED" icon="time-outline" />
             <SortOption label="Name (A-Z)" value="TITLE" icon="text-outline" />
             <SortOption label="Progress (%)" value="PROGRESS" icon="pie-chart-outline" />
-
             <View style={styles.divider} />
-
             <TouchableOpacity
               style={styles.optionRow}
               onPress={() => {
@@ -171,11 +291,12 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingBottom: 12,
+    paddingTop: 12,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8, // Tighter gap to fit 4 elements
+    gap: 8,
   },
   iconBtn: {
     width: 40,
@@ -201,6 +322,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: "white",
+    paddingBottom: 4,
+    paddingTop: 0,
     fontSize: 15,
   },
   modalOverlay: {
@@ -250,5 +373,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#333",
     marginVertical: 4,
     marginHorizontal: 8,
+  },
+  // 👇 NEW STYLES
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4da3ff", // Cyan badge
+    borderWidth: 1.5,
+    borderColor: "#1c1c26", // Cutout effect
+  },
+  tinyLabel: {
+    fontSize: 7,
+    color: "#888",
+    marginTop: 0,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    textAlign: "center",
+    maxWidth: 36, // Prevent overflow
   },
 });

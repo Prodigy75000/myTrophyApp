@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ProgressCircle from "../../components/ProgressCircle";
+import TrophySkeleton from "../../components/skeletons/TrophySkeleton";
 import TrophyActionSheet from "../../components/trophies/TrophyActionSheet";
 import TrophyCard from "../../components/trophies/TrophyCard";
 import TrophyGroupHeader from "../../components/trophies/TrophyGroupHeader";
@@ -50,7 +51,7 @@ type TrophyGroup = {
 };
 
 export default function GameScreen() {
-  const { id: rawId } = useLocalSearchParams();
+  const { id: rawId, artParam } = useLocalSearchParams();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { trophies, accessToken, accountId, refreshSingleGame, refreshAllTrophies } =
@@ -309,7 +310,6 @@ export default function GameScreen() {
 
   // ⚡ AUTO COLLAPSE LOGIC
   useEffect(() => {
-    // 1. WAIT for data (Fixes the bug where it runs too early on empty lists)
     if (!groupedData || groupedData.length === 0 || hasInitializedCollapse) {
       return;
     }
@@ -317,14 +317,13 @@ export default function GameScreen() {
     const initialCollapsed = new Set<string>();
 
     groupedData.forEach((g) => {
-      // 2. Simple Logic: If 100%, collapse it.
       if (g.progress === 100) {
         initialCollapsed.add(g.id);
       }
     });
 
     setCollapsedGroups(initialCollapsed);
-    setHasInitializedCollapse(true); // Now we lock it
+    setHasInitializedCollapse(true);
   }, [groupedData, hasInitializedCollapse]);
 
   const toggleGroup = (groupId: string) => {
@@ -347,6 +346,15 @@ export default function GameScreen() {
     await refreshAllTrophies();
     setRefreshing(false);
   };
+
+  const displayArt =
+    (typeof artParam === "string" ? artParam : null) ||
+    game?.gameArtUrl ||
+    game?.trophyTitleIconUrl;
+
+  const isSpecialArt = displayArt && game && displayArt !== game.trophyTitleIconUrl;
+  const isPS5 = game?.trophyTitlePlatform === "PS5";
+  const heroResizeMode = isPS5 || isSpecialArt ? "cover" : "contain";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
@@ -390,13 +398,14 @@ export default function GameScreen() {
         })}
         scrollEventThrottle={16}
       >
+        {/* HERO HEADER */}
         <View style={styles.heroContainer}>
           <View style={styles.iconWrapper}>
             <View style={styles.gameIconContainer}>
               <Image
                 source={{ uri: game.trophyTitleIconUrl }}
                 style={{ width: "100%", height: "100%" }}
-                resizeMode="contain"
+                resizeMode={heroResizeMode}
               />
             </View>
             {game.trophyTitlePlatform && (
@@ -418,34 +427,34 @@ export default function GameScreen() {
                 icon={trophyIcons.bronze}
                 earned={game.earnedTrophies.bronze}
                 total={game.definedTrophies.bronze}
-                color="#CD7F32"
               />
               <StatColumn
                 icon={trophyIcons.silver}
                 earned={game.earnedTrophies.silver}
                 total={game.definedTrophies.silver}
-                color="#C0C0C0"
               />
               <StatColumn
                 icon={trophyIcons.gold}
                 earned={game.earnedTrophies.gold}
                 total={game.definedTrophies.gold}
-                color="#FFD700"
               />
-              <StatColumn
-                icon={trophyIcons.platinum}
-                earned={game.earnedTrophies.platinum}
-                total={game.definedTrophies.platinum}
-                color="#E5E4E2"
-              />
+              {game.definedTrophies.platinum > 0 && (
+                <StatColumn
+                  icon={trophyIcons.platinum}
+                  earned={game.earnedTrophies.platinum}
+                  total={game.definedTrophies.platinum}
+                />
+              )}
             </View>
           </View>
         </View>
 
         {isInitialLoading && (
-          <Text style={{ color: "white", textAlign: "center", marginTop: 20 }}>
-            Loading Trophies...
-          </Text>
+          <View style={{ paddingHorizontal: 0 }}>
+            {Array.from({ length: 8 }).map((_, index) => (
+              <TrophySkeleton key={`skeleton-${index}`} />
+            ))}
+          </View>
         )}
 
         <View style={{ paddingHorizontal: 0 }}>
@@ -464,7 +473,6 @@ export default function GameScreen() {
                       onToggle={() => toggleGroup(group.id)}
                     />
 
-                    {/* Conditionally Render Trophies */}
                     {!isCollapsed &&
                       group.trophies.map((trophy: any) => (
                         <TrophyCard
@@ -528,11 +536,13 @@ export default function GameScreen() {
   );
 }
 
-const StatColumn = ({ icon, earned, total, color }: any) => (
+// 🎨 UPDATED STAT COLUMN: Neutral Colors
+const StatColumn = ({ icon, earned, total }: any) => (
   <View style={styles.statColumn}>
     <Image source={icon} style={styles.statIcon} resizeMode="contain" />
-    <Text style={[styles.statText, { color }]}>
-      {earned}/{total}
+    <Text style={{ fontSize: 12, color: "#888" }}>
+      {/* Earned is Bold White, Total is Gray */}
+      <Text style={{ color: "#fff", fontWeight: "bold" }}>{earned}</Text>/{total}
     </Text>
   </View>
 );
@@ -603,5 +613,5 @@ const styles = StyleSheet.create({
   breakdownRow: { flexDirection: "row", gap: 16 },
   statColumn: { alignItems: "center" },
   statIcon: { width: 20, height: 20, marginBottom: 4 },
-  statText: { fontSize: 12, fontWeight: "bold" },
+  // statText style removed to use inline neutral styles
 });

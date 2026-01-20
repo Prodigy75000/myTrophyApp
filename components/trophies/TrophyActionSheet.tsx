@@ -10,7 +10,14 @@ type Props = {
   gameName: string;
   trophyName: string;
   trophyType: "bronze" | "silver" | "gold" | "platinum";
-  trophyIconUrl?: string; // 👈 This fixes the red squiggly line!
+  trophyIconUrl?: string; // 👈 ADD THIS LINE to fix the [id].tsx error
+};
+
+const trophyTypeIcon = {
+  bronze: require("../../assets/icons/trophies/bronze.png"),
+  silver: require("../../assets/icons/trophies/silver.png"),
+  gold: require("../../assets/icons/trophies/gold.png"),
+  platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
 export default function TrophyActionSheet({
@@ -19,9 +26,11 @@ export default function TrophyActionSheet({
   gameName,
   trophyName,
   trophyType,
-  trophyIconUrl,
+  trophyIconUrl, // 👈 Add this here too (destructure it)
 }: Props) {
   const insets = useSafeAreaInsets();
+
+  // ... (Keep the rest of the component exactly as is)
   const [activeGuide, setActiveGuide] = useState<{
     game: string;
     trophy: string;
@@ -56,62 +65,74 @@ export default function TrophyActionSheet({
 
       <Modal
         transparent
-        animationType="slide"
+        animationType="fade"
         visible={visible}
         onRequestClose={onClose}
         statusBarTranslucent={true}
       >
         <View style={styles.overlay}>
-          {/* Backdrop */}
           <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
 
-          {/* Compact Sheet */}
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
-            {/* Visual Drag Handle */}
-            <View style={styles.dragHandle} />
-
-            <View style={styles.container}>
-              {/* 1. LEFT: Big Trophy Art (72px) for Art Lovers */}
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: trophyIconUrl }}
-                  resizeMode="cover"
-                  style={styles.largeIcon}
-                />
-              </View>
-
-              {/* 2. CENTER: Info */}
-              <View style={styles.textColumn}>
-                <Text style={styles.title} numberOfLines={2}>
-                  {trophyName}
-                </Text>
-                <Text style={styles.subtitle} numberOfLines={1}>
-                  {gameName}
-                </Text>
-              </View>
-
-              {/* 3. RIGHT: 3 Compact Actions */}
-              <View style={styles.actionsRow}>
-                <ActionButton
-                  icon="logo-youtube"
-                  color="#FF0000"
-                  bg="rgba(255, 0, 0, 0.15)"
-                  onPress={handleWatchGuide}
-                />
-                <ActionButton
-                  icon="book"
-                  color="#4da3ff"
-                  bg="rgba(77, 163, 255, 0.15)"
-                  onPress={handleReadGuide}
-                />
-                <ActionButton
-                  icon="logo-google"
-                  color="#aaa"
-                  bg="rgba(255, 255, 255, 0.1)"
-                  onPress={handleGoogleSearch}
-                />
-              </View>
+          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 10 }]}>
+            {/* HEADER */}
+            <View style={styles.header}>
+              <Image
+                source={trophyTypeIcon[trophyType]}
+                resizeMode="contain"
+                style={styles.icon}
+              />
+              <Text style={styles.title} numberOfLines={2}>
+                {trophyName}
+              </Text>
             </View>
+
+            <View style={styles.divider} />
+
+            {/* ACTIONS */}
+            <Pressable
+              onPress={handleWatchGuide}
+              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+            >
+              <View
+                style={[styles.iconBox, { backgroundColor: "rgba(255, 0, 0, 0.15)" }]}
+              >
+                <Ionicons name="logo-youtube" size={20} color="#FF0000" />
+              </View>
+              <View style={styles.textColumn}>
+                <Text style={styles.actionText}>Watch Video Guide</Text>
+                <Text style={styles.subText}>Find best tutorial on YouTube</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#666" />
+            </Pressable>
+
+            <Pressable
+              onPress={handleReadGuide}
+              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+            >
+              <View
+                style={[styles.iconBox, { backgroundColor: "rgba(77, 163, 255, 0.15)" }]}
+              >
+                <Ionicons name="book" size={20} color="#4da3ff" />
+              </View>
+              <View style={styles.textColumn}>
+                <Text style={styles.actionText}>Read Guide</Text>
+                <Text style={styles.subText}>PSNProfiles • TrueAchievements</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#666" />
+            </Pressable>
+
+            <Pressable
+              onPress={handleGoogleSearch}
+              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+            >
+              <View style={[styles.iconBox, { backgroundColor: "#222" }]}>
+                <Ionicons name="logo-google" size={20} color="#aaa" />
+              </View>
+              <View style={styles.textColumn}>
+                <Text style={[styles.actionText, { color: "#aaa" }]}>Google Search</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#444" />
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -119,102 +140,81 @@ export default function TrophyActionSheet({
   );
 }
 
-// Compact Button Helper
-const ActionButton = ({
-  icon,
-  color,
-  bg,
-  onPress,
-}: {
-  icon: any;
-  color: string;
-  bg: string;
-  onPress: () => void;
-}) => (
-  <Pressable
-    onPress={onPress}
-    style={({ pressed }) => [styles.actionBtn, { backgroundColor: pressed ? color : bg }]}
-  >
-    {({ pressed }) => <Ionicons name={icon} size={18} color={pressed ? "#fff" : color} />}
-  </Pressable>
-);
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     justifyContent: "flex-end",
   },
-  sheet: {
+  sheetContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
     backgroundColor: "#151b2b",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#2a3449",
-    width: "100%",
+    paddingTop: 8,
+    paddingHorizontal: 8,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
-    elevation: 20,
+    elevation: 10,
   },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#2a3449",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  container: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingTop: 4,
-    paddingBottom: 8,
+    padding: 12,
+    marginBottom: 4,
   },
-  imageContainer: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 5,
-    marginRight: 14,
-  },
-  largeIcon: {
-    width: 100, // Big icon request
-    height: 100,
-    borderRadius: 12,
-    backgroundColor: "#000",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  textColumn: {
-    flex: 1,
-    justifyContent: "center",
+  icon: {
+    width: 28,
+    height: 28,
     marginRight: 12,
   },
   title: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 4,
-    lineHeight: 20,
+    flex: 1,
   },
-  subtitle: {
-    color: "#888",
-    fontSize: 12,
+  divider: {
+    height: 1,
+    backgroundColor: "#2a3449",
+    marginBottom: 8,
+    marginHorizontal: 12,
   },
-  actionsRow: {
+  actionRow: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
   },
-  actionBtn: {
-    width: 36, // Compact circles
+  actionPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  iconBox: {
+    width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
+    marginRight: 14,
+  },
+  textColumn: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  actionText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  subText: {
+    color: "#888",
+    fontSize: 12,
   },
 });

@@ -85,7 +85,7 @@ export default function TrophyListHeader({
           />
         </View>
 
-        {/* SORT BUTTON (Opens Modal) */}
+        {/* SORT BUTTON (HARMONIZED ICON) */}
         <TouchableOpacity
           onPress={() => setShowSortMenu(true)}
           style={[
@@ -94,7 +94,7 @@ export default function TrophyListHeader({
           ]}
         >
           <Ionicons
-            name="filter" // Changed from "options" for clarity
+            name="swap-vertical" // 🔄 Swapped to match Home Screen
             size={22}
             color={sortMode !== "DEFAULT" ? "#4da3ff" : "white"}
           />
@@ -119,13 +119,10 @@ export default function TrophyListHeader({
 
             <View style={styles.divider} />
 
-            {/* 👇 SORT DIRECTION TOGGLE (Moved Inside) */}
             <TouchableOpacity
               style={styles.optionRow}
               onPress={() => {
                 onSortDirectionChange();
-                // Optional: Keep menu open or close it?
-                // Closing it feels snappier.
                 setShowSortMenu(false);
               }}
             >
@@ -152,6 +149,7 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
     paddingBottom: 12,
+    paddingVertical: 6,
   },
   row: {
     flexDirection: "row",

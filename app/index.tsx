@@ -1,8 +1,21 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons"; // 1. IMPORT ICONS
 import { useNavigation } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Text, View } from "react-native";
+import {
+  Animated,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { SortDirection, SortMode, ViewMode } from "../components/HeaderActionBar";
+import type {
+  FilterMode,
+  SortDirection,
+  SortMode,
+  ViewMode,
+} from "../components/HeaderActionBar";
 import HeaderActionBar from "../components/HeaderActionBar";
 import GameCard from "../components/trophies/GameCard";
 import GameGridItem from "../components/trophies/GameGridItem";
@@ -31,20 +44,28 @@ export default function HomeScreen() {
   const [sortMode, setSortMode] = useState<SortMode>("LAST_PLAYED");
   const [sortDirection, setSortDirection] = useState<SortDirection>("DESC");
   const [viewMode, setViewMode] = useState<ViewMode>("LIST");
+  const [filterMode, setFilterMode] = useState<FilterMode>("ALL");
   const [gridColumns, setGridColumns] = useState(3);
 
-  // ⚡ WATCHDOG STATE: Tracks games that just updated
+  // 📌 PINNING STATE
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+
+  // 👁️ ACTIVE PEEK STATE
+  const [activePeekId, setActivePeekId] = useState<string | null>(null);
+
+  // ⚡ WATCHDOG STATE
   const [justUpdatedIds, setJustUpdatedIds] = useState<Set<string>>(new Set());
-  // Store previous counts to detect changes
   const prevCountsRef = useRef<Map<string, number>>(new Map());
+
+  // ⬆️ SCROLL TO TOP STATE
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
   // Watchdog Effect
   useEffect(() => {
     if (!trophies?.trophyTitles) return;
-
     const newUpdates = new Set<string>();
     let hasUpdates = false;
-
     trophies.trophyTitles.forEach((game: any) => {
       const id = game.npCommunicationId;
       const currentTotal =
@@ -52,28 +73,19 @@ export default function HomeScreen() {
         game.earnedTrophies.silver +
         game.earnedTrophies.gold +
         game.earnedTrophies.platinum;
-
       const prevTotal = prevCountsRef.current.get(id);
-
-      // Detect Increase (Only if we had a previous value, so it doesn't flash on first load)
       if (prevTotal !== undefined && currentTotal > prevTotal) {
         newUpdates.add(id);
         hasUpdates = true;
       }
-
-      // Update ref for next time
       prevCountsRef.current.set(id, currentTotal);
     });
-
     if (hasUpdates) {
-      // Add new IDs to the set
       setJustUpdatedIds((prev) => {
         const next = new Set(prev);
         newUpdates.forEach((id) => next.add(id));
         return next;
       });
-
-      // Remove them after 3 seconds
       setTimeout(() => {
         setJustUpdatedIds((prev) => {
           const next = new Set(prev);
@@ -84,7 +96,7 @@ export default function HomeScreen() {
     }
   }, [trophies]);
 
-  // Fetch Profile & Level ... (Existing code)
+  // Fetch Profile
   useEffect(() => {
     if (!accountId || !accessToken) return;
     fetch(`${PROXY_BASE_URL}/api/user/profile/${accountId}`, {
@@ -113,6 +125,7 @@ export default function HomeScreen() {
 
   const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
 
+  // Calculate User Stats
   const userStats = useMemo(() => {
     if (!trophies?.trophyTitles) return null;
     return trophies.trophyTitles.reduce(
@@ -142,17 +155,28 @@ export default function HomeScreen() {
     outputRange: [0, -totalHeaderHeight],
   });
 
+  // 1. FILTER
   const filteredTrophies = React.useMemo(() => {
     if (!trophies?.trophyTitles) return [];
-    return trophies.trophyTitles.filter((game: any) =>
+    let list = trophies.trophyTitles.filter((game: any) =>
       game.trophyTitleName.toLowerCase().includes(searchText.toLowerCase())
     );
-  }, [searchText, trophies]);
+    if (filterMode === "IN_PROGRESS") {
+      list = list.filter((g: any) => g.progress > 0 && g.progress < 100);
+    } else if (filterMode === "COMPLETED") {
+      list = list.filter((g: any) => g.progress === 100);
+    } else if (filterMode === "NOT_STARTED") {
+      list = list.filter((g: any) => g.progress === 0);
+    }
+    return list;
+  }, [searchText, trophies, filterMode]);
 
+  // 2. SORT + PIN PRIORITY
   const sortedTrophies = React.useMemo(() => {
     const list = [...filteredTrophies];
     const dir = sortDirection === "ASC" ? 1 : -1;
-    return list.sort((a, b) => {
+
+    list.sort((a, b) => {
       if (sortMode === "TITLE")
         return a.trophyTitleName.localeCompare(b.trophyTitleName) * dir;
       if (sortMode === "PROGRESS")
@@ -165,19 +189,51 @@ export default function HomeScreen() {
       const timeB = new Date(b.lastUpdatedDateTime).getTime();
       return (timeA - timeB) * dir;
     });
-  }, [filteredTrophies, sortMode, sortDirection]);
 
-  // 2️⃣ MERGED RENDER ITEM
+    return list.sort((a, b) => {
+      const isPinnedA = pinnedIds.has(a.npCommunicationId);
+      const isPinnedB = pinnedIds.has(b.npCommunicationId);
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+      return 0;
+    });
+  }, [filteredTrophies, sortMode, sortDirection, pinnedIds]);
+
+  const togglePin = (id: string) => {
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const renderItem = React.useCallback(
     ({ item }: { item: any }) => {
       const progress = item.progress;
       const art = item.gameArtUrl || item.trophyTitleIconUrl;
       const isJustUpdated = justUpdatedIds.has(item.npCommunicationId);
+      const isPinned = pinnedIds.has(item.npCommunicationId);
+      const isPeeking = activePeekId === item.npCommunicationId;
 
-      // 👻 GHOST EFFECT: Mute games with 0% progress
       const wrapperStyle = progress === 0 ? { opacity: 0.5 } : { opacity: 1 };
 
-      // A) GRID VIEW
+      const counts = {
+        total:
+          item.definedTrophies.bronze +
+          item.definedTrophies.silver +
+          item.definedTrophies.gold +
+          item.definedTrophies.platinum,
+        bronze: item.definedTrophies.bronze,
+        silver: item.definedTrophies.silver,
+        gold: item.definedTrophies.gold,
+        platinum: item.definedTrophies.platinum,
+        earnedBronze: item.earnedTrophies.bronze,
+        earnedSilver: item.earnedTrophies.silver,
+        earnedGold: item.earnedTrophies.gold,
+        earnedPlatinum: item.earnedTrophies.platinum,
+      };
+
       if (viewMode === "GRID") {
         return (
           <View style={wrapperStyle}>
@@ -187,13 +243,21 @@ export default function HomeScreen() {
               platform={item.trophyTitlePlatform}
               progress={progress}
               numColumns={gridColumns}
-              justUpdated={isJustUpdated} // 👈 PASS TRIGGER
+              justUpdated={isJustUpdated}
+              counts={counts}
+              isPinned={isPinned}
+              onPin={() => togglePin(item.npCommunicationId)}
+              isPeeking={isPeeking}
+              onTogglePeek={() => {
+                setActivePeekId((current) =>
+                  current === item.npCommunicationId ? null : item.npCommunicationId
+                );
+              }}
             />
           </View>
         );
       }
 
-      // B) LIST VIEW
       return (
         <View style={wrapperStyle}>
           <GameCard
@@ -204,28 +268,36 @@ export default function HomeScreen() {
             platform={item.trophyTitlePlatform}
             progress={progress}
             lastPlayed={item.lastUpdatedDateTime}
-            counts={{
-              total:
-                item.definedTrophies.bronze +
-                item.definedTrophies.silver +
-                item.definedTrophies.gold +
-                item.definedTrophies.platinum,
-              bronze: item.definedTrophies.bronze,
-              silver: item.definedTrophies.silver,
-              gold: item.definedTrophies.gold,
-              platinum: item.definedTrophies.platinum,
-              earnedBronze: item.earnedTrophies.bronze,
-              earnedSilver: item.earnedTrophies.silver,
-              earnedGold: item.earnedTrophies.gold,
-              earnedPlatinum: item.earnedTrophies.platinum,
-            }}
-            justUpdated={isJustUpdated} // 👈 PASS TRIGGER
+            counts={counts}
+            justUpdated={isJustUpdated}
+            isPinned={isPinned}
+            onPin={() => togglePin(item.npCommunicationId)}
           />
         </View>
       );
     },
-    [viewMode, gridColumns, justUpdatedIds] // Add dependency
+    [viewMode, gridColumns, justUpdatedIds, pinnedIds, activePeekId]
   );
+
+  // 🕵️ SCROLL HANDLER with Listener
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    {
+      useNativeDriver: true,
+      listener: (event: any) => {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        if (offsetY > 300 && !showScrollTop) {
+          setShowScrollTop(true);
+        } else if (offsetY <= 300 && showScrollTop) {
+          setShowScrollTop(false);
+        }
+      },
+    }
+  );
+
+  const scrollToTop = () => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: "#0a0b0fff" }}>
@@ -253,11 +325,14 @@ export default function HomeScreen() {
           }
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          onFilterChange={setFilterMode}
+          filterMode={filterMode}
         />
       </Animated.View>
 
       {trophies && trophies.trophyTitles ? (
         <Animated.FlatList
+          ref={flatListRef} // 👈 ATTACH REF
           key={viewMode === "GRID" ? `grid-${gridColumns}` : "list"}
           data={sortedTrophies}
           keyExtractor={(item) => String(item.npCommunicationId)}
@@ -270,13 +345,12 @@ export default function HomeScreen() {
             await refreshAllTrophies();
             setRefreshing(false);
           }}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-            useNativeDriver: true,
-          })}
+          onScrollBeginDrag={() => setActivePeekId(null)}
+          onScroll={handleScroll} // 👈 USE WRAPPED HANDLER
           scrollEventThrottle={16}
           contentContainerStyle={{
             paddingTop: totalHeaderHeight + 10,
-            paddingBottom: 20,
+            paddingBottom: 80, // Added padding so Fab doesn't cover last item
             paddingHorizontal: viewMode === "GRID" ? 2 : 0,
           }}
           initialNumToRender={10}
@@ -306,6 +380,35 @@ export default function HomeScreen() {
           ⚠️ No trophy data yet.
         </Text>
       )}
+
+      {/* ⬆️ SCROLL TO TOP FAB */}
+      {showScrollTop && (
+        <TouchableOpacity style={styles.fab} onPress={scrollToTop} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="arrow-up" size={24} color="white" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(77,163,255,0.30)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+});

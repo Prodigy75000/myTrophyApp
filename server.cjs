@@ -415,28 +415,28 @@ app.get("/api/trophies/:accountId", async (req, res) => {
     };
 
     for (const game of gameList) {
-      // 🛡️ STRICT RULE: Only look for Store Art if it's a PS5 game.
-      // PS5 Store Art is consistently Square (MASTER).
-      // PS4 Store Art is messy (Banners, Portrait) and causes zooming issues.
-      const isPS5 = game.titleId && game.titleId.startsWith("PPSA");
+      // 🛡️ UPDATED RULE: Allow PS5 (PPSA) AND PS4 (CUSA)
+      // This enables Square Store Art for PS4 games that have it (like Outlast).
+      const validPlatform =
+        game.titleId &&
+        (game.titleId.startsWith("PPSA") || // PS5
+          game.titleId.startsWith("CUSA")); // PS4
 
-      if (!isPS5) continue; // SKIP ALL PS4/PS3. They will fall back to Trophy Icons.
+      if (!validPlatform) continue;
 
       const media = game.concept?.media?.images || [];
       const master = media.find((img) => img.type === "MASTER")?.url;
 
-      // Use MASTER if available, otherwise nothing.
-      const bestArt = master;
+      // Use MASTER (Square) if available.
+      if (!master) continue;
 
-      if (!bestArt) continue;
-
-      // Map it
-      if (game.titleId) artMapById.set(game.titleId, bestArt);
+      // Map it by ID and Name
+      if (game.titleId) artMapById.set(game.titleId, master);
       if (game.concept?.titleIds) {
-        game.concept.titleIds.forEach((id) => artMapById.set(id, bestArt));
+        game.concept.titleIds.forEach((id) => artMapById.set(id, master));
       }
       if (game.name) {
-        artMapByName.set(normalize(game.name), bestArt);
+        artMapByName.set(normalize(game.name), master);
       }
     }
 
@@ -458,14 +458,13 @@ app.get("/api/trophies/:accountId", async (req, res) => {
       return {
         ...t,
         trophyTitleIconUrl: t.trophyTitleIconUrl,
-        // PS5 -> Uses Store Art (High Res Square)
-        // PS4 -> Uses Trophy Icon (Standard Square) - NO ZOOMING!
+        // Now works for PS4 too if storeArt was found!
         gameArtUrl: storeArt || t.trophyTitleIconUrl,
       };
     });
 
     console.log(
-      `🎨 Artwork Matched (PS5 Only): ${matchCount} / ${trophyTitles.length} games`
+      `🎨 Artwork Matched (PS5 + PS4): ${matchCount} / ${trophyTitles.length} games`
     );
 
     res.json({

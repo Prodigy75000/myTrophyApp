@@ -1,12 +1,17 @@
+// components/trophies/ProfileDashboard.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import React, { memo } from "react";
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from "react-native";
 
-type Props = {
+// ---------------------------------------------------------------------------
+// TYPES & ASSETS
+// ---------------------------------------------------------------------------
+
+type DashboardProps = {
   username: string;
   avatarUrl?: string;
   isPlus?: boolean;
-  totalTrophies: number;
+  totalTrophies: number; // Kept for potential future use
   counts: {
     bronze: number;
     silver: number;
@@ -16,36 +21,54 @@ type Props = {
   level?: number;
 };
 
-const icons = {
+const TROPHY_ICONS = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
-export default function ProfileDashboard({
+const DEFAULT_AVATAR = "https://i.psnprofiles.com/avatars/l/G566B09312.png";
+
+// ---------------------------------------------------------------------------
+// SUB-COMPONENT: Stat Item
+// ---------------------------------------------------------------------------
+
+type StatItemProps = {
+  icon: ImageSourcePropType;
+  count: number;
+  color: string;
+};
+
+const StatItem = ({ icon, count, color }: StatItemProps) => (
+  <View style={styles.statItem}>
+    <Image source={icon} style={styles.statIcon} resizeMode="contain" />
+    <Text style={[styles.statCount, { color }]}>{count}</Text>
+  </View>
+);
+
+// ---------------------------------------------------------------------------
+// MAIN COMPONENT
+// ---------------------------------------------------------------------------
+
+function ProfileDashboard({
   username,
-  avatarUrl,
-  isPlus,
+  avatarUrl = DEFAULT_AVATAR,
+  isPlus = false,
   counts,
   level,
-}: Props) {
+}: DashboardProps) {
   return (
     <View style={styles.container}>
-      {/* LEFT: Avatar & Identity */}
+      {/* LEFT SECTION: Avatar & Identity */}
       <View style={styles.leftSection}>
         <View style={styles.avatarContainer}>
-          <Image
-            source={{
-              uri: avatarUrl ?? "https://i.psnprofiles.com/avatars/l/G566B09312.png",
-            }}
-            style={styles.avatar}
-          />
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
 
-          {/* Plus Badge (Top Left) */}
+          {/* PS Plus Badge (Top Left) */}
           {isPlus && (
             <View style={styles.plusOverlay}>
-              <Ionicons name="add" size={8} color="black" style={{ fontWeight: "900" }} />
+              <Ionicons name="add" size={8} color="black" style={styles.plusIcon} />
             </View>
           )}
 
@@ -62,29 +85,28 @@ export default function ProfileDashboard({
         </Text>
       </View>
 
-      {/* RIGHT: Compact Trophies */}
+      {/* RIGHT SECTION: Compact Trophies */}
       <View style={styles.statsRow}>
-        <StatItem icon={icons.platinum} count={counts.platinum} color="#E5E4E2" />
-        <StatItem icon={icons.gold} count={counts.gold} color="#FFD700" />
-        <StatItem icon={icons.silver} count={counts.silver} color="#C0C0C0" />
-        <StatItem icon={icons.bronze} count={counts.bronze} color="#CD7F32" />
+        <StatItem icon={TROPHY_ICONS.platinum} count={counts.platinum} color="#E5E4E2" />
+        <StatItem icon={TROPHY_ICONS.gold} count={counts.gold} color="#FFD700" />
+        <StatItem icon={TROPHY_ICONS.silver} count={counts.silver} color="#C0C0C0" />
+        <StatItem icon={TROPHY_ICONS.bronze} count={counts.bronze} color="#CD7F32" />
       </View>
     </View>
   );
 }
 
-const StatItem = ({ icon, count, color }: any) => (
-  <View style={styles.statItem}>
-    <Image source={icon} style={styles.statIcon} resizeMode="contain" />
-    <Text style={[styles.statCount, { color }]}>{count}</Text>
-  </View>
-);
+// Export memoized component to prevent re-renders if props don't change
+export default memo(ProfileDashboard);
+
+// ---------------------------------------------------------------------------
+// STYLES
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#151b2b",
     marginHorizontal: 8,
-    marginTop: 0,
     marginBottom: 8,
     borderRadius: 12,
     paddingVertical: 8,
@@ -94,6 +116,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    // Shadows
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -103,25 +126,27 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1, // Allow username to take available space
+    flex: 1,
     marginRight: 8,
   },
+  // Avatar
   avatarContainer: {
     position: "relative",
     marginRight: 10,
   },
   avatar: {
-    width: 36, // Smaller Avatar (was 50)
+    width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: "#222",
   },
+  // Badges
   plusOverlay: {
     position: "absolute",
     top: -2,
     left: -2,
     backgroundColor: "#FFD700",
-    width: 12, // Smaller badge
+    width: 12,
     height: 12,
     borderRadius: 6,
     justifyContent: "center",
@@ -129,6 +154,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#151b2b",
     zIndex: 2,
+  },
+  plusIcon: {
+    fontWeight: "900",
   },
   levelBadge: {
     position: "absolute",
@@ -144,31 +172,32 @@ const styles = StyleSheet.create({
   },
   levelText: {
     color: "#000",
-    fontSize: 8, // Smaller text
+    fontSize: 8,
     fontWeight: "bold",
   },
   username: {
     color: "white",
-    fontSize: 14, // Slightly smaller font
+    fontSize: 14,
     fontWeight: "bold",
-    flexShrink: 1, // Allows truncation if name is too long
+    flexShrink: 1,
   },
+  // Stats
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10, // Space between trophy counts
+    gap: 10,
   },
   statItem: {
-    flexDirection: "row", // 👈 Side-by-side Icon + Number
+    flexDirection: "row",
     alignItems: "center",
   },
   statIcon: {
-    width: 14, // Mini Icons
+    width: 14,
     height: 14,
     marginRight: 4,
   },
   statCount: {
-    fontSize: 12, // Mini Numbers
+    fontSize: 12,
     fontWeight: "bold",
   },
 });

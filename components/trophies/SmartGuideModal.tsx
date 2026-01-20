@@ -1,5 +1,6 @@
+// components/trophies/SmartGuideModal.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -12,6 +13,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
+// ---------------------------------------------------------------------------
+// TYPES
+// ---------------------------------------------------------------------------
+
 type SmartGuideProps = {
   visible: boolean;
   onClose: () => void;
@@ -20,45 +25,58 @@ type SmartGuideProps = {
   mode: "VIDEO" | "GUIDE" | null;
 };
 
-// 🛡️ The "Harmonizer" Script
-// 1. Forces Dark Background immediately
-// 2. Hides Ads & Clutter
-// 3. Tries to blend the YouTube header with our app
-const DARK_MODE_SCRIPT = `
+// ---------------------------------------------------------------------------
+// CONFIGURATION
+// ---------------------------------------------------------------------------
+
+/**
+ * The "Harmonizer" Script
+ * Injects CSS to force dark mode and hide clutter/ads on 3rd party sites.
+ */
+const DARK_MODE_INJECTION = `
   (function() {
-    // Force Dark Background on Body & HTML
-    document.documentElement.style.backgroundColor = '#151b2b';
-    document.body.style.backgroundColor = '#151b2b';
+    try {
+      // 1. Force Dark Background
+      const darkColor = '#151b2b';
+      document.documentElement.style.backgroundColor = darkColor;
+      document.body.style.backgroundColor = darkColor;
 
-    const style = document.createElement('style');
-    style.innerHTML = \`
-      /* 1. Global Dark Theme Override */
-      body, html { background-color: #151b2b !important; color: white !important; }
-      
-      /* 2. YouTube Specific Cleanup */
-      /* Make the top search bar blend in */
-      .mobile-topbar-header, ytm-mobile-topbar-renderer { 
-        background-color: #151b2b !important; 
-        border-bottom: 1px solid #2a3449 !important;
-      }
-      /* Fix text colors in search bar */
-      .mobile-topbar-header-content .search-mode .placeholder { color: #888 !important; }
-      
-      /* Hide the "Open App" promotions */
-      .upsell-dialog-renderer, .big-yoodle, .smart-app-banner { display: none !important; }
-
-      /* 3. Ad & Clutter Killers */
-      .adsbygoogle, .ad-banner, .advertisement, [id^="google_ads"] { display: none !important; }
-      #cookie-banner, #onetrust-banner-sdk { display: none !important; }
-      
-      /* 4. PSNProfiles Cleanup */
-      #header, #footer { display: none !important; }
-      .box.no-top-border { display: none !important; }
-    \`;
-    document.head.appendChild(style);
+      const style = document.createElement('style');
+      style.innerHTML = \`
+        /* Global Override */
+        body, html { background-color: #151b2b !important; color: white !important; }
+        
+        /* YouTube Mobile Cleanup */
+        .mobile-topbar-header, ytm-mobile-topbar-renderer { 
+          background-color: #151b2b !important; 
+          border-bottom: 1px solid #2a3449 !important;
+        }
+        .mobile-topbar-header-content .search-mode .placeholder { color: #888 !important; }
+        
+        /* Hide Annoyances (Open App banners, cookie popups) */
+        .upsell-dialog-renderer, .big-yoodle, .smart-app-banner, .promotion { display: none !important; }
+        #cookie-banner, #onetrust-banner-sdk { display: none !important; }
+        
+        /* Hide Ads */
+        .adsbygoogle, .ad-banner, [id^="google_ads"] { display: none !important; }
+        
+        /* PSNProfiles Specifics */
+        #header, #footer { display: none !important; }
+        .box.no-top-border { display: none !important; }
+      \`;
+      document.head.appendChild(style);
+    } catch (e) { console.error("Injection failed", e); }
   })();
-  true;
+  true; // Required for WebView
 `;
+
+// Force Android Dark Mode User Agent
+const USER_AGENT =
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36";
+
+// ---------------------------------------------------------------------------
+// COMPONENT
+// ---------------------------------------------------------------------------
 
 export default function SmartGuideModal({
   visible,
@@ -70,37 +88,37 @@ export default function SmartGuideModal({
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
 
-  if (!mode) return null;
+  // Memoize URL generation to prevent flicker on re-renders
+  const targetUrl = useMemo(() => {
+    if (!mode) return "";
 
-  // 1. Construct Query
-  let url = "";
-  if (mode === "VIDEO") {
-    // Added quotes for precision search
-    const query = encodeURIComponent(`${gameName} "${trophyName}" trophy guide`);
-    url = `https://m.youtube.com/results?search_query=${query}`;
-  } else {
-    const query = encodeURIComponent(
-      `${gameName} "${trophyName}" trophy guide psnprofiles`
-    );
-    url = `https://www.google.com/search?q=${query}`;
-  }
+    // Sanitize inputs
+    const safeGame = encodeURIComponent(gameName);
+    const safeTrophy = encodeURIComponent(`"${trophyName}"`); // Quotes for exact match
+
+    if (mode === "VIDEO") {
+      return `https://m.youtube.com/results?search_query=${safeGame}+${safeTrophy}+trophy+guide`;
+    }
+    return `https://www.google.com/search?q=${safeGame}+${safeTrophy}+trophy+guide+psnprofiles`;
+  }, [gameName, trophyName, mode]);
+
+  if (!mode) return null;
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={false} // 👈 Solid background prevents "see-through" glitches
+      transparent={false}
       onRequestClose={onClose}
       statusBarTranslucent={true}
     >
-      {/* 🟢 GLOBAL CONTAINER: Matches App Theme (#151b2b) */}
+      {/* GLOBAL CONTAINER: Matches App Theme (#151b2b) */}
       <View style={[styles.container, { backgroundColor: "#151b2b" }]}>
-        {/* Force Status Bar to match our dark header */}
         <StatusBar barStyle="light-content" backgroundColor="#151b2b" />
 
         {/* HEADER */}
         <View style={[styles.header, { marginTop: insets.top }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
             <Ionicons name="close" size={26} color="white" />
           </TouchableOpacity>
 
@@ -113,34 +131,35 @@ export default function SmartGuideModal({
             </Text>
           </View>
 
-          {/* Spinner */}
-          <View style={{ width: 40, alignItems: "center" }}>
+          {/* Loading Indicator */}
+          <View style={styles.loaderContainer}>
             {loading && <ActivityIndicator size="small" color="#4da3ff" />}
           </View>
         </View>
 
         {/* WEBVIEW */}
         <WebView
-          source={{ uri: url }}
-          // 👈 Seamless Background Color
-          style={{ flex: 1, backgroundColor: "#151b2b" }}
-          containerStyle={{ backgroundColor: "#151b2b" }}
+          source={{ uri: targetUrl }}
+          style={styles.webview}
+          containerStyle={styles.webviewContainer}
           javaScriptEnabled={true}
           domStorageEnabled={true}
-          injectedJavaScript={DARK_MODE_SCRIPT} // 💉 The "Harmonizer"
+          injectedJavaScript={DARK_MODE_INJECTION}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
-          // Force Android Dark Mode User Agent
-          userAgent="Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+          userAgent={USER_AGENT}
+          // Performance props
+          startInLoadingState={false}
+          showsVerticalScrollIndicator={false}
         />
-
-        {/* 🟢 BOTTOM FILLER (Optional) */}
-        {/* If there is still a tiny white line at the very bottom on some devices, 
-            this ensures the container behind the webview is dark blue. */}
       </View>
     </Modal>
   );
 }
+
+// ---------------------------------------------------------------------------
+// STYLES
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -152,8 +171,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#2a3449", // Subtle separator
+    borderBottomColor: "#2a3449",
     backgroundColor: "#151b2b",
+    height: 60, // Fixed height for consistency
   },
   closeBtn: {
     padding: 4,
@@ -170,5 +190,16 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     color: "#888",
     fontSize: 12,
+  },
+  loaderContainer: {
+    width: 40,
+    alignItems: "center",
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: "#151b2b",
+  },
+  webviewContainer: {
+    backgroundColor: "#151b2b",
   },
 });

@@ -1,5 +1,6 @@
-import React from "react";
-import { Text, View } from "react-native";
+// components/ProgressCircle.tsx
+import React, { memo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 
 type Props = {
@@ -8,50 +9,37 @@ type Props = {
   progress: number; // 0–100
 };
 
-export default function ProgressCircle({ size = 34, strokeWidth = 4, progress }: Props) {
+function ProgressCircle({ size = 34, strokeWidth = 4, progress }: Props) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (progress / 100) * circumference;
+  // Ensure progress stays between 0-100 to prevent visual glitches
+  const clampedProgress = Math.min(100, Math.max(0, progress));
+  const offset = circumference - (clampedProgress / 100) * circumference;
 
-  // 🎨 THEME: PlayStation Blue Gradient
-  // From bright cyan (#00CEFF) to deep blue (#006FCD)
-  const isComplete = progress === 100;
+  const isComplete = clampedProgress === 100;
 
-  // Option: Turn Gold if 100%? Or stick to Blue?
-  // Let's stick to Blue for consistency, or use Gold for Platinum feel.
-  // For now, let's do the Premium Blue.
-  const GRADIENT_ID = "blueGradient";
+  // Unique IDs for gradients (scoped to this file context mostly)
+  const BLUE_GRADIENT_ID = "blueGradient";
+  const GOLD_GRADIENT_ID = "goldGradient";
 
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        justifyContent: "center",
-        alignItems: "center",
-        position: "relative",
-      }}
-    >
-      <Svg
-        width={size}
-        height={size}
-        style={{ position: "absolute", transform: [{ rotate: "-90deg" }] }}
-      >
-        {/* ✨ DEFINITIONS FOR GRADIENT */}
+    <View style={[styles.container, { width: size, height: size }]}>
+      <Svg width={size} height={size} style={styles.svg}>
         <Defs>
-          <LinearGradient id={GRADIENT_ID} x1="0%" y1="0%" x2="100%" y2="0%">
+          {/* Standard Blue Gradient */}
+          <LinearGradient id={BLUE_GRADIENT_ID} x1="0%" y1="0%" x2="100%" y2="0%">
             <Stop offset="0%" stopColor="#4da3ff" stopOpacity="1" />
             <Stop offset="100%" stopColor="#006FCD" stopOpacity="1" />
           </LinearGradient>
 
-          {/* Optional: Gold Gradient for 100% */}
-          <LinearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          {/* Platinum/Gold Gradient for 100% */}
+          <LinearGradient id={GOLD_GRADIENT_ID} x1="0%" y1="0%" x2="100%" y2="100%">
             <Stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
             <Stop offset="100%" stopColor="#FFA500" stopOpacity="1" />
           </LinearGradient>
         </Defs>
 
-        {/* Background ring (Dark Grey) */}
+        {/* Background Track (Dark Grey) */}
         <Circle
           stroke="#333"
           fill="none"
@@ -61,9 +49,9 @@ export default function ProgressCircle({ size = 34, strokeWidth = 4, progress }:
           strokeWidth={strokeWidth}
         />
 
-        {/* Progress ring (Uses Gradient) */}
+        {/* Progress Indicator */}
         <Circle
-          stroke={isComplete ? "url(#goldGradient)" : `url(#${GRADIENT_ID})`} // Gold if 100%, Blue otherwise
+          stroke={isComplete ? `url(#${GOLD_GRADIENT_ID})` : `url(#${BLUE_GRADIENT_ID})`}
           fill="none"
           cx={size / 2}
           cy={size / 2}
@@ -75,16 +63,39 @@ export default function ProgressCircle({ size = 34, strokeWidth = 4, progress }:
         />
       </Svg>
 
-      {/* Percentage text */}
+      {/* Percentage Text */}
       <Text
-        style={{
-          color: isComplete ? "#FFD700" : "#fff", // Gold text if 100%
-          fontSize: size * 0.28, // Dynamic font size based on circle size
-          fontWeight: "700",
-        }}
+        style={[
+          styles.text,
+          {
+            fontSize: size * 0.28,
+            color: isComplete ? "#FFD700" : "#fff",
+          },
+        ]}
       >
-        {Math.round(progress)}%
+        {Math.round(clampedProgress)}%
       </Text>
     </View>
   );
 }
+
+export default memo(ProgressCircle);
+
+// ---------------------------------------------------------------------------
+// STYLES
+// ---------------------------------------------------------------------------
+
+const styles = StyleSheet.create({
+  container: {
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  svg: {
+    position: "absolute",
+    transform: [{ rotate: "-90deg" }], // Rotate so progress starts at top
+  },
+  text: {
+    fontWeight: "700",
+  },
+});

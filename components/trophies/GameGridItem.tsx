@@ -73,7 +73,9 @@ const GameGridItem = ({
   const lastTapRef = useRef<number>(0);
 
   const screenWidth = Dimensions.get("window").width;
-  const size = (screenWidth - (numColumns + 1) * 4) / numColumns;
+
+  // 📏 SIZE CALCULATION (Zero Padding)
+  const size = screenWidth / numColumns;
 
   const isPS5 = platform === "PS5";
   const dynamicResizeMode = isPS5 ? "cover" : "contain";
@@ -113,26 +115,24 @@ const GameGridItem = ({
   };
 
   return (
-    <View style={{ position: "relative" }}>
+    <View style={{ width: size, height: size, padding: 0.5 }}>
       <Pressable
         onPress={handlePress}
         style={({ pressed }) => ({
-          transform: [{ scale: pressed ? 0.96 : 1 }],
+          flex: 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
         })}
       >
         <Animated.View
           style={{
-            width: size,
-            height: size,
-            marginBottom: 4,
-            marginHorizontal: 2,
-            borderRadius: 8,
+            flex: 1,
+            borderRadius: 0,
             overflow: "hidden",
             backgroundColor: "#000",
             position: "relative",
             justifyContent: "center",
             alignItems: "center",
-            borderWidth: 2,
+            borderWidth: justUpdated ? 2 : 0,
             borderColor: borderColor,
           }}
         >
@@ -189,12 +189,12 @@ const GameGridItem = ({
         </Animated.View>
       </Pressable>
 
-      {/* 📌 PIN ICON */}
-      {!isPeeking && (
+      {/* 📌 PIN ICON: Show if Pinned OR Peeking */}
+      {(isPinned || isPeeking) && (
         <TouchableOpacity onPress={onPin} style={styles.pinButton} hitSlop={10}>
           <MaterialCommunityIcons
             name={isPinned ? "pin" : "pin-outline"}
-            size={16}
+            size={14}
             color={isPinned ? "#4da3ff" : "#fff"}
           />
         </TouchableOpacity>
@@ -203,7 +203,7 @@ const GameGridItem = ({
   );
 };
 
-// 🎨 UPDATED PEEK ROW: Neutral Colors
+// 🎨 PEEK ROW
 const PeekRow = ({ icon, earned, total }: any) => (
   <View style={styles.peekRow}>
     <Image source={icon} style={styles.peekIcon} resizeMode="contain" />
@@ -221,36 +221,36 @@ const styles = StyleSheet.create({
   },
   platformBadge: {
     position: "absolute",
-    bottom: 6,
-    left: 6,
+    bottom: 4,
+    left: 4,
     backgroundColor: "rgba(0,0,0,0.85)",
-    paddingVertical: 2,
-    paddingHorizontal: 5,
-    borderRadius: 4,
+    paddingVertical: 1,
+    paddingHorizontal: 4,
+    borderRadius: 2,
   },
   badgeText: {
     color: "white",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "bold",
     textTransform: "uppercase",
   },
   progressContainer: {
     position: "absolute",
-    bottom: 6,
-    right: 6,
+    bottom: 4,
+    right: 4,
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: 20,
-    padding: 2,
+    padding: 1,
   },
   peekOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 99,
   },
   peekContent: {
-    gap: 6,
+    gap: 4,
     alignItems: "flex-start",
   },
   peekRow: {
@@ -258,27 +258,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   peekIcon: {
-    width: 18,
-    height: 18,
-    marginRight: 8,
+    width: 16,
+    height: 16,
+    marginRight: 6,
   },
   peekText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
   pinButton: {
     position: "absolute",
-    top: 4,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    top: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    zIndex: 50,
+    // Ensure it stays above the peek overlay (which is zIndex 99)
+    zIndex: 100,
   },
 });
 

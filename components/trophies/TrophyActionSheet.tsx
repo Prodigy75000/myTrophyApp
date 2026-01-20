@@ -1,50 +1,96 @@
+// components/trophies/TrophyActionSheet.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { Image, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Components & Utils
+import { TrophyType } from "../../utils/normalizeTrophy"; // Ensure you have this exported in utils
 import SmartGuideModal from "./SmartGuideModal";
 
-type Props = {
+// ---------------------------------------------------------------------------
+// TYPES & ASSETS
+// ---------------------------------------------------------------------------
+
+type ActionSheetProps = {
   visible: boolean;
   onClose: () => void;
   gameName: string;
   trophyName: string;
-  trophyType: "bronze" | "silver" | "gold" | "platinum";
-  trophyIconUrl?: string; // 👈 ADD THIS LINE to fix the [id].tsx error
+  trophyType: TrophyType; // Uses strict type "bronze" | "silver" etc.
+  trophyIconUrl?: string;
 };
 
-const trophyTypeIcon = {
+const TROPHY_ICONS: Record<string, any> = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
-export default function TrophyActionSheet({
+// ---------------------------------------------------------------------------
+// SUB-COMPONENT: Action Row
+// ---------------------------------------------------------------------------
+
+type ActionRowProps = {
+  iconName: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  iconBg: string;
+  title: string;
+  subtitle?: string;
+  onPress: () => void;
+};
+
+const ActionRow = ({
+  iconName,
+  iconColor,
+  iconBg,
+  title,
+  subtitle,
+  onPress,
+}: ActionRowProps) => (
+  <Pressable
+    onPress={onPress}
+    style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+  >
+    <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
+      <Ionicons name={iconName} size={20} color={iconColor} />
+    </View>
+    <View style={styles.textColumn}>
+      <Text style={[styles.actionText, !subtitle && { color: "#aaa" }]}>{title}</Text>
+      {subtitle && <Text style={styles.subText}>{subtitle}</Text>}
+    </View>
+    <Ionicons name="chevron-forward" size={16} color={subtitle ? "#666" : "#444"} />
+  </Pressable>
+);
+
+// ---------------------------------------------------------------------------
+// MAIN COMPONENT
+// ---------------------------------------------------------------------------
+
+function TrophyActionSheet({
   visible,
   onClose,
   gameName,
   trophyName,
   trophyType,
-  trophyIconUrl, // 👈 Add this here too (destructure it)
-}: Props) {
+  trophyIconUrl,
+}: ActionSheetProps) {
   const insets = useSafeAreaInsets();
-
-  // ... (Keep the rest of the component exactly as is)
   const [activeGuide, setActiveGuide] = useState<{
-    game: string;
-    trophy: string;
     mode: "VIDEO" | "GUIDE";
   } | null>(null);
 
+  // --- Handlers ---
+
   const handleWatchGuide = () => {
-    setActiveGuide({ game: gameName, trophy: trophyName, mode: "VIDEO" });
-    onClose();
+    setActiveGuide({ mode: "VIDEO" });
+    // Note: We don't close the modal yet, the SmartGuideModal sits on top
+    // Alternatively, you can close this one if SmartGuideModal is a separate screen
   };
 
   const handleReadGuide = () => {
-    setActiveGuide({ game: gameName, trophy: trophyName, mode: "GUIDE" });
-    onClose();
+    setActiveGuide({ mode: "GUIDE" });
   };
 
   const handleGoogleSearch = () => {
@@ -53,16 +99,23 @@ export default function TrophyActionSheet({
     onClose();
   };
 
+  const closeAll = () => {
+    setActiveGuide(null);
+    onClose();
+  };
+
   return (
     <>
+      {/* 1. Guide Modal (Pops up over this sheet if active) */}
       <SmartGuideModal
         visible={!!activeGuide}
         onClose={() => setActiveGuide(null)}
-        gameName={activeGuide?.game ?? ""}
-        trophyName={activeGuide?.trophy ?? ""}
+        gameName={gameName}
+        trophyName={trophyName}
         mode={activeGuide?.mode ?? null}
       />
 
+      {/* 2. Action Sheet Modal */}
       <Modal
         transparent
         animationType="fade"
@@ -71,13 +124,14 @@ export default function TrophyActionSheet({
         statusBarTranslucent={true}
       >
         <View style={styles.overlay}>
+          {/* Backdrop tap to close */}
           <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
 
           <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 10 }]}>
             {/* HEADER */}
             <View style={styles.header}>
               <Image
-                source={trophyTypeIcon[trophyType]}
+                source={TROPHY_ICONS[trophyType] || TROPHY_ICONS.bronze}
                 resizeMode="contain"
                 style={styles.icon}
               />
@@ -89,56 +143,43 @@ export default function TrophyActionSheet({
             <View style={styles.divider} />
 
             {/* ACTIONS */}
-            <Pressable
+            <ActionRow
+              iconName="logo-youtube"
+              iconColor="#FF0000"
+              iconBg="rgba(255, 0, 0, 0.15)"
+              title="Watch Video Guide"
+              subtitle="Find best tutorial on YouTube"
               onPress={handleWatchGuide}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View
-                style={[styles.iconBox, { backgroundColor: "rgba(255, 0, 0, 0.15)" }]}
-              >
-                <Ionicons name="logo-youtube" size={20} color="#FF0000" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={styles.actionText}>Watch Video Guide</Text>
-                <Text style={styles.subText}>Find best tutorial on YouTube</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#666" />
-            </Pressable>
+            />
 
-            <Pressable
+            <ActionRow
+              iconName="book"
+              iconColor="#4da3ff"
+              iconBg="rgba(77, 163, 255, 0.15)"
+              title="Read Guide"
+              subtitle="PSNProfiles • TrueAchievements"
               onPress={handleReadGuide}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View
-                style={[styles.iconBox, { backgroundColor: "rgba(77, 163, 255, 0.15)" }]}
-              >
-                <Ionicons name="book" size={20} color="#4da3ff" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={styles.actionText}>Read Guide</Text>
-                <Text style={styles.subText}>PSNProfiles • TrueAchievements</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#666" />
-            </Pressable>
+            />
 
-            <Pressable
+            <ActionRow
+              iconName="logo-google"
+              iconColor="#aaa"
+              iconBg="#222"
+              title="Google Search"
               onPress={handleGoogleSearch}
-              style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
-            >
-              <View style={[styles.iconBox, { backgroundColor: "#222" }]}>
-                <Ionicons name="logo-google" size={20} color="#aaa" />
-              </View>
-              <View style={styles.textColumn}>
-                <Text style={[styles.actionText, { color: "#aaa" }]}>Google Search</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#444" />
-            </Pressable>
+            />
           </View>
         </View>
       </Modal>
     </>
   );
 }
+
+export default memo(TrophyActionSheet);
+
+// ---------------------------------------------------------------------------
+// STYLES
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   overlay: {
@@ -155,6 +196,7 @@ const styles = StyleSheet.create({
     borderColor: "#2a3449",
     paddingTop: 8,
     paddingHorizontal: 8,
+    // Shadows
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
@@ -184,6 +226,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginHorizontal: 12,
   },
+  // Action Row Styles
   actionRow: {
     flexDirection: "row",
     alignItems: "center",

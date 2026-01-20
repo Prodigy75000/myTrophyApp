@@ -1,37 +1,68 @@
+// components/trophies/TrophyGroupHeader.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { memo } from "react";
+import {
+  Image,
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-type Props = {
-  title: string;
-  image?: string;
-  isBaseGame: boolean;
-  counts: {
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-  };
-  earnedCounts: {
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-  };
-  progress?: number;
-  // 👇 NEW PROPS
-  collapsed: boolean;
-  onToggle: () => void;
-};
+// ---------------------------------------------------------------------------
+// ASSETS & TYPES
+// ---------------------------------------------------------------------------
 
-const icons = {
+const ICONS = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
-export default function TrophyGroupHeader({
+type CountSet = {
+  bronze: number;
+  silver: number;
+  gold: number;
+  platinum: number;
+};
+
+type Props = {
+  title: string;
+  image?: string;
+  isBaseGame: boolean;
+  counts: CountSet;
+  earnedCounts: CountSet;
+  progress?: number;
+  collapsed: boolean;
+  onToggle: () => void;
+};
+
+// ---------------------------------------------------------------------------
+// SUB-COMPONENT: Stat Item
+// ---------------------------------------------------------------------------
+
+type StatProps = {
+  icon: ImageSourcePropType;
+  earned: number;
+  total: number;
+};
+
+const Stat = ({ icon, earned, total }: StatProps) => (
+  <View style={styles.statContainer}>
+    <Image source={icon} style={styles.statIcon} resizeMode="contain" />
+    <Text style={styles.statText}>
+      <Text style={styles.statEarned}>{earned}</Text>/{total}
+    </Text>
+  </View>
+);
+
+// ---------------------------------------------------------------------------
+// MAIN COMPONENT
+// ---------------------------------------------------------------------------
+
+function TrophyGroupHeader({
   title,
   isBaseGame,
   counts,
@@ -40,10 +71,12 @@ export default function TrophyGroupHeader({
   collapsed,
   onToggle,
 }: Props) {
+  // 1. Calculate Totals
   const totalCount = counts.bronze + counts.silver + counts.gold + counts.platinum;
   const earnedCount =
     earnedCounts.bronze + earnedCounts.silver + earnedCounts.gold + earnedCounts.platinum;
 
+  // 2. Determine Display Percentage
   const displayPercent =
     progress !== undefined
       ? progress
@@ -55,19 +88,24 @@ export default function TrophyGroupHeader({
 
   return (
     <TouchableOpacity style={styles.container} onPress={onToggle} activeOpacity={0.7}>
-      {/* HEADER ROW */}
+      {/* TOP ROW: Title & Badge */}
       <View style={styles.headerRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, isBaseGame && styles.baseGameTitle]}>{title}</Text>
+        <View style={styles.titleWrapper}>
+          <Text
+            style={[styles.title, isBaseGame && styles.baseGameTitle]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
           <Text style={styles.subtitle}>
             {isBaseGame ? "Base Game" : "DLC"} • {earnedCount}/{totalCount} Trophies
           </Text>
         </View>
 
-        {/* RIGHT SIDE: Badge + Chevron */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        {/* Right Side: Badge + Chevron */}
+        <View style={styles.rightSide}>
           <View style={[styles.badge, isCompleted && styles.completedBadge]}>
-            <Text style={[styles.badgeText, isCompleted && { color: "#000" }]}>
+            <Text style={[styles.badgeText, isCompleted && styles.completedText]}>
               {displayPercent}%
             </Text>
           </View>
@@ -80,15 +118,15 @@ export default function TrophyGroupHeader({
         </View>
       </View>
 
-      {/* STATS ROW (Hide if collapsed, or keep visible? Usually nicer to keep visible summary) */}
-      {/* Keeping summary visible even when collapsed allows quick checking */}
+      {/* BOTTOM ROW: Stats Summary */}
+      {/* We keep this visible even when collapsed for quick info access */}
       <View style={styles.statsRow}>
-        <Stat icon={icons.bronze} earned={earnedCounts.bronze} total={counts.bronze} />
-        <Stat icon={icons.silver} earned={earnedCounts.silver} total={counts.silver} />
-        <Stat icon={icons.gold} earned={earnedCounts.gold} total={counts.gold} />
+        <Stat icon={ICONS.bronze} earned={earnedCounts.bronze} total={counts.bronze} />
+        <Stat icon={ICONS.silver} earned={earnedCounts.silver} total={counts.silver} />
+        <Stat icon={ICONS.gold} earned={earnedCounts.gold} total={counts.gold} />
         {counts.platinum > 0 && (
           <Stat
-            icon={icons.platinum}
+            icon={ICONS.platinum}
             earned={earnedCounts.platinum}
             total={counts.platinum}
           />
@@ -98,14 +136,11 @@ export default function TrophyGroupHeader({
   );
 }
 
-const Stat = ({ icon, earned, total }: any) => (
-  <View style={{ flexDirection: "row", alignItems: "center", marginRight: 16 }}>
-    <Image source={icon} style={{ width: 14, height: 14, marginRight: 6 }} />
-    <Text style={{ color: "#888", fontSize: 12 }}>
-      {earned}/{total}
-    </Text>
-  </View>
-);
+export default memo(TrophyGroupHeader);
+
+// ---------------------------------------------------------------------------
+// STYLES
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -117,36 +152,75 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#4da3ff",
     borderRadius: 4,
+    // Optional: Add subtle shadow for depth
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  titleWrapper: {
+    flex: 1,
+    marginRight: 10,
+  },
+  rightSide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   title: {
-    color: "white",
+    color: "#ddd", // Slightly softer white for DLCs
     fontSize: 15,
     fontWeight: "bold",
   },
   baseGameTitle: {
     fontSize: 17,
-    color: "#fff",
+    color: "#fff", // Bright white for Base Game
   },
   subtitle: {
     color: "#666",
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 4,
+    fontWeight: "500",
   },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 4,
   },
+  // Stat Item Styles
+  statContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  statIcon: {
+    width: 14,
+    height: 14,
+    marginRight: 6,
+  },
+  statText: {
+    color: "#666", // Total count color
+    fontSize: 12,
+  },
+  statEarned: {
+    color: "#ccc", // Earned count color (brighter)
+    fontWeight: "600",
+  },
+  // Badge Styles
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     backgroundColor: "#2a3449",
+    minWidth: 40,
+    alignItems: "center",
   },
   completedBadge: {
     backgroundColor: "#4caf50",
@@ -155,5 +229,8 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  completedText: {
+    color: "#000",
   },
 });

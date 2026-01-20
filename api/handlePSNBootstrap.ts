@@ -1,74 +1,69 @@
-// app/utils/handlePSNBootstrap.ts
-
-/**
- * PSN Bootstrap Helper (TEMPORARY)
- * ---------------------------------------------------
- * Purpose:
- * - Perform initial authentication against the backend
- * - Retrieve a valid PSN access token + accountId
- * - Fetch the user's initial trophy payload
- *
- * Scope & Limitations:
- * - This is NOT a reusable auth layer
- * - This is NOT meant for token refresh
- * - This is a one-shot bootstrap used at app start
- *
- * Future:
- * - Will eventually be replaced by a proper Auth / Session manager
- */
-
-import { Alert } from "react-native";
+// api/handlePSNBootstrap.ts
 import { PROXY_BASE_URL } from "../config/endpoints";
 
 /**
- * Dependencies injected from React state
- * (keeps this helper UI-agnostic and testable)
+ * Expected shape of the login response from the backend.
+ */
+interface LoginResponse {
+  accessToken: string;
+  accountId: string;
+  expiresIn?: number;
+}
+
+/**
+ * Dependencies injected to keep this function pure and testable.
+ * Using generic 'unknown' for trophies data until the shape is strictly defined.
  */
 type BootstrapDeps = {
   setAccessToken: (token: string) => void;
   setAccountId: (id: string) => void;
-  setTrophies: (data: any) => void;
+  setTrophies: (data: unknown) => void;
 };
 
 /**
+ * Return type to let the caller handle UI feedback (Alerts, Toasts, etc.)
+ */
+type BootstrapResult =
+  | { success: true; data: unknown }
+  | { success: false; error: string };
+
+/**
  * Handles the full PSN bootstrap flow:
- * 1. Call backend login endpoint
- * 2. Validate access token + accountId
- * 3. Fetch trophies for the authenticated account
- * 4. Hydrate app state
+ * 1. Authenticate with backend
+ * 2. Fetch initial trophy data
+ * 3. Update application state
+ *
+ * @returns A promise resolving to the operation result.
  */
 export async function handlePSNBootstrap({
   setAccessToken,
   setAccountId,
   setTrophies,
-}: BootstrapDeps) {
+}: BootstrapDeps): Promise<BootstrapResult> {
   try {
     // --------------------------------------------------
-    // STEP 1 — Backend login
+    // STEP 1: Backend Authentication
     // --------------------------------------------------
-    console.log("[PSN bootstrap] Connecting to backend");
-
+    console.log("🔐 [PSN Bootstrap] Initiating login...");
     const loginRes = await fetch(`${PROXY_BASE_URL}/api/login`);
 
-    console.log("🔎 login status:", loginRes.status);
-
     if (!loginRes.ok) {
-      const text = await loginRes.text();
-      throw new Error(`Login HTTP ${loginRes.status}: ${text}`);
+      throw new Error(`Login failed with status: ${loginRes.status}`);
     }
 
-    const loginData = await loginRes.json();
+    const loginData = (await loginRes.json()) as LoginResponse;
 
-    // Defensive validation: never trust backend blindly
+    // Validate critical fields before proceeding
     if (!loginData.accessToken || !loginData.accountId) {
-      throw new Error("Invalid login payload");
+      throw new Error("Malformed login response: Missing token or account ID.");
     }
 
-    console.log("✅ Access token received");
+    console.log("✅ [PSN Bootstrap] Login successful.");
 
     // --------------------------------------------------
-    // STEP 2 — Fetch trophies for this account
+    // STEP 2: Fetch Trophies
     // --------------------------------------------------
+    console.log("🏆 [PSN Bootstrap] Fetching trophy data...");
     const trophiesRes = await fetch(
       `${PROXY_BASE_URL}/api/trophies/${loginData.accountId}`,
       {
@@ -79,39 +74,27 @@ export async function handlePSNBootstrap({
       }
     );
 
-    console.log("🔎 trophies status:", trophiesRes.status);
-
     if (!trophiesRes.ok) {
-      const text = await trophiesRes.text();
-      throw new Error(`Trophies HTTP ${trophiesRes.status}: ${text}`);
+      throw new Error(`Trophy fetch failed with status: ${trophiesRes.status}`);
     }
 
     const trophiesData = await trophiesRes.json();
 
     // --------------------------------------------------
-    // STEP 3 — Hydrate application state
+    // STEP 3: State Hydration
     // --------------------------------------------------
     setAccessToken(loginData.accessToken);
     setAccountId(loginData.accountId);
     setTrophies(trophiesData);
 
-    // Success response (useful for caller-side UX decisions)
-    return {
-      success: true,
-      data: trophiesData,
-    };
-  } catch (err: any) {
-    // --------------------------------------------------
-    // ERROR HANDLING
-    // --------------------------------------------------
-    console.error("❌ LOGIN FLOW ERROR:", err);
+    return { success: true, data: trophiesData };
+  } catch (error: any) {
+    console.error("❌ [PSN Bootstrap] Error:", error);
 
-    // User-facing error (only failure should be noisy)
-    Alert.alert("Login failed", err.message ?? "Unknown error");
-
+    // Return the error so the UI can decide whether to Alert or show a message
     return {
       success: false,
-      error: err.message,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
     };
   }
 }

@@ -1,31 +1,49 @@
 // hooks/useTrophyFilter.ts
 import { useMemo } from "react";
-import type { FilterMode, SortDirection, SortMode } from "../components/HeaderActionBar";
+import type {
+  FilterMode,
+  OwnershipMode,
+  SortDirection,
+  SortMode,
+} from "../components/HeaderActionBar";
 
-type TrophyGame = any; // Replace with your actual TrophyTitle interface when available
+// Helper to calculate counts
+const getCounts = (game: any) => ({
+  total:
+    (game.definedTrophies?.bronze || 0) +
+    (game.definedTrophies?.silver || 0) +
+    (game.definedTrophies?.gold || 0) +
+    (game.definedTrophies?.platinum || 0),
+  bronze: game.definedTrophies?.bronze || 0,
+  silver: game.definedTrophies?.silver || 0,
+  gold: game.definedTrophies?.gold || 0,
+  platinum: game.definedTrophies?.platinum || 0,
+  earnedBronze: game.earnedTrophies?.bronze || 0,
+  earnedSilver: game.earnedTrophies?.silver || 0,
+  earnedGold: game.earnedTrophies?.gold || 0,
+  earnedPlatinum: game.earnedTrophies?.platinum || 0,
+});
 
-/**
- * Hook to handle all the heavy lifting of filtering, sorting, and calculating stats.
- */
 export function useTrophyFilter(
-  trophies: { trophyTitles: TrophyGame[] } | null,
+  userTrophies: any | null,
+  masterGames: any[],
   searchText: string,
   filterMode: FilterMode,
+  ownershipMode: OwnershipMode,
   sortMode: SortMode,
   sortDirection: SortDirection,
-  pinnedIds: Set<string>
+  pinnedIds: Set<string>,
+  showShovelware: boolean // 👈 NEW PARAM
 ) {
-  // 1. Calculate Global Stats (Bronze/Silver/Gold counts)
+  // 1. CALCULATE STATS
   const userStats = useMemo(() => {
-    if (!trophies?.trophyTitles) return null;
-
-    return trophies.trophyTitles.reduce(
-      (acc: any, game: TrophyGame) => {
+    if (!userTrophies?.trophyTitles) return null;
+    return userTrophies.trophyTitles.reduce(
+      (acc: any, game: any) => {
         acc.bronze += game.earnedTrophies.bronze;
         acc.silver += game.earnedTrophies.silver;
         acc.gold += game.earnedTrophies.gold;
         acc.platinum += game.earnedTrophies.platinum;
-        // Total count
         acc.total +=
           game.earnedTrophies.bronze +
           game.earnedTrophies.silver +
@@ -35,58 +53,175 @@ export function useTrophyFilter(
       },
       { bronze: 0, silver: 0, gold: 0, platinum: 0, total: 0 }
     );
-  }, [trophies]);
+  }, [userTrophies]);
 
-  // 2. Filter the list (Search text + Status)
-  const filteredList = useMemo(() => {
-    if (!trophies?.trophyTitles) return [];
+  // 2. CREATE LOOKUP MAP
+  const masterLookup = useMemo(() => {
+    const map = new Map<string, any>();
+    if (!masterGames) return map;
+    masterGames.forEach((game) => {
+      if (game.canonicalId) {
+        map.set(game.canonicalId, game);
+        if (game.linkedVersions) {
+          game.linkedVersions.forEach((v: any) => map.set(v.npCommunicationId, game));
+        }
+      }
+    });
+    return map;
+  }, [masterGames]);
 
-    let list = trophies.trophyTitles.filter((game: TrophyGame) =>
-      game.trophyTitleName.toLowerCase().includes(searchText.toLowerCase())
+  // 3. MERGE & GROUP LOGIC
+  const processedList = useMemo(() => {
+    const rawUserGames = userTrophies?.trophyTitles || [];
+    const groupedMap = new Map<string, any>();
+
+    // A. Process Owned Games
+    rawUserGames.forEach((game: any) => {
+      const masterEntry = masterLookup.get(game.npCommunicationId);
+      // 🛡️ CRASH FIX: Ensure valid ID. Use Master ID -> fallback to Game ID -> fallback to random (rare)
+      const groupKey =
+        masterEntry?.canonicalId || game.npCommunicationId || `err_${Math.random()}`;
+      // 1. Try to find specific region info from Master Data
+      let regionTag = undefined;
+      if (masterEntry?.linkedVersions) {
+        const specificVer = masterEntry.linkedVersions.find(
+          (v: any) => v.npCommunicationId === game.npCommunicationId
+        );
+        if (specificVer?.region) regionTag = specificVer.region;
+      }
+      if (!groupedMap.has(groupKey)) {
+        groupedMap.set(groupKey, {
+          id: groupKey, // 👈 THE FIX for "undefined key"
+          title: masterEntry ? masterEntry.displayName : game.trophyTitleName,
+          icon: masterEntry?.art?.square || game.trophyTitleIconUrl,
+          art: masterEntry?.art?.square || game.gameArtUrl,
+          tags: masterEntry?.tags || [], // Import tags for filtering
+          versions: [],
+        });
+      }
+
+      groupedMap.get(groupKey).versions.push({
+        id: game.npCommunicationId,
+        platform: game.trophyTitlePlatform,
+        progress: game.progress,
+        lastPlayed: game.lastUpdatedDateTime,
+        counts: getCounts(game),
+        isOwned: true,
+      });
+    });
+
+    // B. Process Unowned (Global Search)
+    if (ownershipMode !== "OWNED") {
+      masterGames.forEach((masterGame: any) => {
+        const groupKey = masterGame.canonicalId;
+        if (!groupKey) return;
+
+        if (!groupedMap.has(groupKey)) {
+          const newItem = {
+            id: groupKey,
+            title: masterGame.displayName,
+            icon: masterGame.art.square,
+            art: masterGame.art.square,
+            tags: masterGame.tags || [],
+            versions: [],
+          };
+          groupedMap.set(groupKey, newItem);
+        }
+
+        const group = groupedMap.get(groupKey);
+        masterGame.linkedVersions?.forEach((v: any) => {
+          if (!group.versions.some((gv: any) => gv.id === v.npCommunicationId)) {
+            group.versions.push({
+              id: v.npCommunicationId,
+              platform: v.platform,
+              progress: 0,
+              lastPlayed: null,
+              counts: {
+                total: 0,
+                bronze: 0,
+                silver: 0,
+                gold: 0,
+                platinum: 0,
+                earnedBronze: 0,
+                earnedSilver: 0,
+                earnedGold: 0,
+                earnedPlatinum: 0,
+              },
+              isOwned: false,
+            });
+          }
+        });
+      });
+    }
+
+    // Convert to Array
+    let combinedList = Array.from(groupedMap.values()).filter(
+      (g) => g.versions.length > 0
     );
 
-    switch (filterMode) {
-      case "IN_PROGRESS":
-        return list.filter((g: any) => g.progress > 0 && g.progress < 100);
-      case "COMPLETED":
-        return list.filter((g: any) => g.progress === 100);
-      case "NOT_STARTED":
-        return list.filter((g: any) => g.progress === 0);
-      default:
-        return list;
+    // C. FILTERING
+    if (!showShovelware) {
+      combinedList = combinedList.filter((g) => !g.tags?.includes("shovelware"));
     }
-  }, [trophies, searchText, filterMode]);
 
-  // 3. Sort the list (Alphabetical, Progress, Date + Pinned items)
+    if (searchText) {
+      const lower = searchText.toLowerCase();
+      combinedList = combinedList.filter((g) => g.title?.toLowerCase().includes(lower));
+    }
+
+    if (filterMode !== "ALL") {
+      combinedList = combinedList.filter((g) => {
+        return g.versions.some((v: any) => {
+          if (filterMode === "IN_PROGRESS") return v.progress > 0 && v.progress < 100;
+          if (filterMode === "COMPLETED") return v.progress === 100;
+          if (filterMode === "NOT_STARTED") return v.progress === 0;
+          return true;
+        });
+      });
+    }
+
+    return combinedList;
+  }, [
+    userTrophies,
+    masterGames,
+    masterLookup,
+    searchText,
+    filterMode,
+    ownershipMode,
+    showShovelware,
+  ]);
+
+  // 4. SORTING
   const sortedList = useMemo(() => {
-    const list = [...filteredList];
+    const list = [...processedList];
     const dir = sortDirection === "ASC" ? 1 : -1;
 
-    // Primary Sort
     list.sort((a, b) => {
+      const bestA = a.versions[0];
+      const bestB = b.versions[0];
+
+      // Pins
+      const isPinnedA = a.versions.some((v: any) => pinnedIds.has(v.id));
+      const isPinnedB = b.versions.some((v: any) => pinnedIds.has(v.id));
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+
       if (sortMode === "TITLE") {
-        return a.trophyTitleName.localeCompare(b.trophyTitleName) * dir;
+        return (a.title || "").localeCompare(b.title || "") * dir;
       }
       if (sortMode === "PROGRESS") {
-        const progA = typeof a.progress === "number" ? a.progress : -1;
-        const progB = typeof b.progress === "number" ? b.progress : -1;
+        const progA = Math.max(...a.versions.map((v: any) => v.progress || 0));
+        const progB = Math.max(...b.versions.map((v: any) => v.progress || 0));
         return (progA - progB) * dir;
       }
-      // Default: LAST_PLAYED
-      const timeA = new Date(a.lastUpdatedDateTime).getTime();
-      const timeB = new Date(b.lastUpdatedDateTime).getTime();
+
+      const timeA = new Date(bestA?.lastPlayed || 0).getTime();
+      const timeB = new Date(bestB?.lastPlayed || 0).getTime();
       return (timeA - timeB) * dir;
     });
 
-    // Secondary Sort: Always bump Pinned items to the top
-    return list.sort((a, b) => {
-      const isPinnedA = pinnedIds.has(a.npCommunicationId);
-      const isPinnedB = pinnedIds.has(b.npCommunicationId);
-      if (isPinnedA && !isPinnedB) return -1;
-      if (!isPinnedA && isPinnedB) return 1;
-      return 0;
-    });
-  }, [filteredList, sortMode, sortDirection, pinnedIds]);
+    return list;
+  }, [processedList, sortMode, sortDirection, pinnedIds]);
 
   return { userStats, sortedList };
 }

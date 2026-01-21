@@ -20,6 +20,7 @@ export type SortMode = "LAST_PLAYED" | "TITLE" | "PROGRESS";
 export type SortDirection = "ASC" | "DESC";
 export type ViewMode = "LIST" | "GRID";
 export type FilterMode = "ALL" | "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
+export type OwnershipMode = "OWNED" | "UNOWNED" | "GLOBAL";
 
 type HeaderProps = {
   onMenuPress: () => void;
@@ -35,28 +36,34 @@ type HeaderProps = {
   // Filter
   filterMode: FilterMode;
   onFilterChange: (mode: FilterMode) => void;
+  ownershipMode: OwnershipMode;
+  onOwnershipChange: (mode: OwnershipMode) => void;
+
+  // 🔽 NEW SHOVELWARE PROP
+  showShovelware: boolean;
+  onToggleShovelware: () => void;
 };
 
-// ---------------------------------------------------------------------------
-// SUB-COMPONENT: Menu Option (Reusable)
-// ---------------------------------------------------------------------------
-
-type MenuOptionProps<T extends string> = {
+// ... (MenuOption component remains the same) ...
+type MenuOptionProps<T> = {
   label: string;
   value: T;
   icon: keyof typeof Ionicons.glyphMap;
-  currentValue: T;
+  currentValue?: T;
+  isChecked?: boolean; // Added for toggle support
   onSelect: (val: T) => void;
 };
 
-function MenuOption<T extends string>({
+function MenuOption<T>({
   label,
   value,
   icon,
   currentValue,
+  isChecked,
   onSelect,
 }: MenuOptionProps<T>) {
-  const isSelected = currentValue === value;
+  // Determine selection state either by value match OR explicit boolean
+  const isSelected = isChecked !== undefined ? isChecked : currentValue === value;
   const activeColor = "#4da3ff";
 
   return (
@@ -85,10 +92,6 @@ function MenuOption<T extends string>({
   );
 }
 
-// ---------------------------------------------------------------------------
-// MAIN COMPONENT
-// ---------------------------------------------------------------------------
-
 function HeaderActionBar({
   onMenuPress,
   onLocalSearch,
@@ -100,27 +103,27 @@ function HeaderActionBar({
   onViewModeChange,
   filterMode,
   onFilterChange,
+  ownershipMode,
+  onOwnershipChange,
+  showShovelware,
+  onToggleShovelware,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [searchText, setSearchText] = useState("");
 
-  // Handlers
   const handleSearch = (text: string) => {
     setSearchText(text);
     onLocalSearch(text);
   };
-
   const handleClearSearch = () => {
     setSearchText("");
     onLocalSearch("");
   };
 
-  // Derived State
-  const isFilterActive = filterMode !== "ALL";
+  const isFilterActive = filterMode !== "ALL" || ownershipMode !== "OWNED";
   const isSortActive = sortMode !== "LAST_PLAYED";
-
   const sortLabelMap: Record<SortMode, string> = {
     TITLE: "Name",
     PROGRESS: "Prog",
@@ -130,16 +133,18 @@ function HeaderActionBar({
   return (
     <View style={styles.container}>
       <View style={styles.row}>
-        {/* 1. MENU BUTTON */}
+        {/* MENU */}
         <TouchableOpacity onPress={onMenuPress} style={styles.iconBtn}>
           <Ionicons name="menu" size={24} color="white" />
         </TouchableOpacity>
 
-        {/* 2. SEARCH BAR */}
+        {/* SEARCH */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={18} color="#666" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search games..."
+            placeholder={
+              ownershipMode === "GLOBAL" ? "Search PSN..." : "Search Library..."
+            }
             placeholderTextColor="#666"
             style={styles.input}
             value={searchText}
@@ -152,7 +157,7 @@ function HeaderActionBar({
           )}
         </View>
 
-        {/* 3. VIEW MODE TOGGLE */}
+        {/* VIEW MODE */}
         <TouchableOpacity
           onPress={() => onViewModeChange(viewMode === "LIST" ? "GRID" : "LIST")}
           style={[
@@ -168,7 +173,7 @@ function HeaderActionBar({
           />
         </TouchableOpacity>
 
-        {/* 4. FILTER BUTTON */}
+        {/* FILTER */}
         <TouchableOpacity
           onPress={() => setShowFilterMenu(true)}
           style={[styles.iconBtn, { marginRight: 0 }, isFilterActive && styles.btnActive]}
@@ -183,7 +188,7 @@ function HeaderActionBar({
           </View>
         </TouchableOpacity>
 
-        {/* 5. SORT BUTTON */}
+        {/* SORT */}
         <TouchableOpacity
           onPress={() => setShowSortMenu(true)}
           style={[styles.iconBtn, isSortActive && styles.btnActive]}
@@ -210,47 +215,73 @@ function HeaderActionBar({
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowFilterMenu(false)}>
           <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
-            <Text style={styles.menuHeader}>Filter Games</Text>
+            <Text style={styles.menuHeader}>Source</Text>
+            {/* Explicitly passing <OwnershipMode> fixes type errors */}
+            <MenuOption<OwnershipMode>
+              label="My Library"
+              value="OWNED"
+              icon="library-outline"
+              currentValue={ownershipMode}
+              onSelect={onOwnershipChange}
+            />
+            <MenuOption<OwnershipMode>
+              label="Discover (Unowned)"
+              value="UNOWNED"
+              icon="globe-outline"
+              currentValue={ownershipMode}
+              onSelect={onOwnershipChange}
+            />
+            <MenuOption<OwnershipMode>
+              label="Global Search"
+              value="GLOBAL"
+              icon="infinite-outline"
+              currentValue={ownershipMode}
+              onSelect={onOwnershipChange}
+            />
 
+            <View style={styles.divider} />
+
+            {/* 🔽 NEW: FILTER TYPE */}
+            <Text style={styles.menuHeader}>Content</Text>
             <MenuOption
-              label="All Games"
+              label="Hide Shovelware"
+              value="SHOVEL"
+              icon="trash-outline"
+              isChecked={!showShovelware}
+              onSelect={onToggleShovelware}
+            />
+
+            <View style={styles.divider} />
+
+            <Text style={styles.menuHeader}>Status</Text>
+            {/* Explicitly passing <FilterMode> */}
+            <MenuOption<FilterMode>
+              label="All"
               value="ALL"
               icon="apps-outline"
               currentValue={filterMode}
-              onSelect={(val) => {
-                onFilterChange(val);
-                setShowFilterMenu(false);
-              }}
+              onSelect={onFilterChange}
             />
-            <MenuOption
+            <MenuOption<FilterMode>
               label="In Progress"
               value="IN_PROGRESS"
               icon="play-circle-outline"
               currentValue={filterMode}
-              onSelect={(val) => {
-                onFilterChange(val);
-                setShowFilterMenu(false);
-              }}
+              onSelect={onFilterChange}
             />
-            <MenuOption
-              label="Completed (100%)"
+            <MenuOption<FilterMode>
+              label="Completed"
               value="COMPLETED"
               icon="trophy-outline"
               currentValue={filterMode}
-              onSelect={(val) => {
-                onFilterChange(val);
-                setShowFilterMenu(false);
-              }}
+              onSelect={onFilterChange}
             />
-            <MenuOption
-              label="Not Started (0%)"
+            <MenuOption<FilterMode>
+              label="Not Started"
               value="NOT_STARTED"
               icon="ellipse-outline"
               currentValue={filterMode}
-              onSelect={(val) => {
-                onFilterChange(val);
-                setShowFilterMenu(false);
-              }}
+              onSelect={onFilterChange}
             />
           </View>
         </Pressable>
@@ -267,7 +298,8 @@ function HeaderActionBar({
           <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
             <Text style={styles.menuHeader}>Sort Games</Text>
 
-            <MenuOption
+            {/* 🟢 FIXED: Added <SortMode> generic to MenuOption */}
+            <MenuOption<SortMode>
               label="Last Played"
               value="LAST_PLAYED"
               icon="time-outline"
@@ -277,7 +309,7 @@ function HeaderActionBar({
                 setShowSortMenu(false);
               }}
             />
-            <MenuOption
+            <MenuOption<SortMode>
               label="Name (A-Z)"
               value="TITLE"
               icon="text-outline"
@@ -287,7 +319,7 @@ function HeaderActionBar({
                 setShowSortMenu(false);
               }}
             />
-            <MenuOption
+            <MenuOption<SortMode>
               label="Progress (%)"
               value="PROGRESS"
               icon="pie-chart-outline"
@@ -299,7 +331,6 @@ function HeaderActionBar({
             />
 
             <View style={styles.divider} />
-
             <TouchableOpacity
               style={styles.optionRow}
               onPress={() => {
@@ -328,22 +359,9 @@ function HeaderActionBar({
 
 export default memo(HeaderActionBar);
 
-// ---------------------------------------------------------------------------
-// STYLES
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    paddingTop: 12,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  // Buttons
+  container: { paddingHorizontal: 16, paddingBottom: 12, paddingTop: 12 },
+  row: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: {
     width: 40,
     height: 40,
@@ -354,15 +372,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  btnActive: {
-    backgroundColor: "rgba(77, 163, 255, 0.1)",
-    borderColor: "#4da3ff",
-  },
-  centered: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Search
+  btnActive: { backgroundColor: "rgba(77, 163, 255, 0.1)", borderColor: "#4da3ff" },
+  centered: { alignItems: "center", justifyContent: "center" },
   searchContainer: {
     flex: 1,
     flexDirection: "row",
@@ -374,18 +385,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  input: {
-    flex: 1,
-    color: "white",
-    paddingBottom: 4,
-    paddingTop: 0,
-    fontSize: 15,
-  },
-  // Menus
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
+  input: { flex: 1, color: "white", paddingBottom: 4, paddingTop: 0, fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
   menuContainer: {
     position: "absolute",
     right: 16,
@@ -409,13 +410,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     textTransform: "uppercase",
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#333",
-    marginVertical: 4,
-    marginHorizontal: 8,
-  },
-  // Options
+  divider: { height: 1, backgroundColor: "#333", marginVertical: 4, marginHorizontal: 8 },
   optionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -424,21 +419,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
   },
-  optionSelected: {
-    backgroundColor: "rgba(77, 163, 255, 0.1)",
-  },
-  optionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  optionIcon: {
-    marginRight: 12,
-  },
-  optionText: {
-    color: "white",
-    fontSize: 15,
-  },
-  // Badges
+  optionSelected: { backgroundColor: "rgba(77, 163, 255, 0.1)" },
+  optionContent: { flexDirection: "row", alignItems: "center" },
+  optionIcon: { marginRight: 12 },
+  optionText: { color: "white", fontSize: 15 },
   badge: {
     position: "absolute",
     top: -2,

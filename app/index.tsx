@@ -24,10 +24,15 @@ import { useTrophy } from "../providers/TrophyContext";
 
 // Custom Hooks
 import { useTrophyFilter } from "../hooks/useTrophyFilter";
+// ⚠️ LOAD MASTER JSON
+// For now, assume it's in ../data/master_games.json
+// If it's too huge, we might need to lazy load it later.
+import masterGamesRaw from "../data/master_games.json";
 
 // Components
 import HeaderActionBar, {
   FilterMode,
+  OwnershipMode,
   SortDirection,
   SortMode,
   ViewMode,
@@ -74,15 +79,21 @@ export default function HomeScreen() {
   const toastTimer = useRef<NodeJS.Timeout | null>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
 
+  const [ownershipMode, setOwnershipMode] = useState<OwnershipMode>("OWNED");
+  const [showShovelware, setShowShovelware] = useState(false); // Default: Hidden
+
   // --- 2. LOGIC HOOKS ---
   // We offload the heavy filtering/sorting to our custom hook
   const { userStats, sortedList } = useTrophyFilter(
     trophies,
+    masterGamesRaw as unknown as any[],
     searchText,
     filterMode,
+    ownershipMode,
     sortMode,
     sortDirection,
-    pinnedIds
+    pinnedIds,
+    showShovelware
   );
 
   // --- 3. EFFECTS ---
@@ -176,60 +187,42 @@ export default function HomeScreen() {
   });
 
   // --- 5. RENDER ---
-
   const renderItem = ({ item }: { item: any }) => {
-    const isPinned = pinnedIds.has(item.npCommunicationId);
-    const counts = {
-      total:
-        item.definedTrophies.bronze +
-        item.definedTrophies.silver +
-        item.definedTrophies.gold +
-        item.definedTrophies.platinum,
-      bronze: item.definedTrophies.bronze,
-      silver: item.definedTrophies.silver,
-      gold: item.definedTrophies.gold,
-      platinum: item.definedTrophies.platinum,
-      earnedBronze: item.earnedTrophies.bronze,
-      earnedSilver: item.earnedTrophies.silver,
-      earnedGold: item.earnedTrophies.gold,
-      earnedPlatinum: item.earnedTrophies.platinum,
-    };
+    // 'item' is now a GROUP: { title, icon, art, versions: [...] }
+
+    // Check if ANY version in the stack is pinned
+    const isPinned = item.versions.some((v: any) => pinnedIds.has(v.id));
+
+    // For GRID view: We need to pick one version to display (e.g. highest progress or PS5)
+    // We sort versions to find the "Best" one to show on the grid tile
+    const bestVersion = [...item.versions].sort((a, b) => b.progress - a.progress)[0];
 
     if (viewMode === "GRID") {
       return (
         <GameGridItem
-          id={item.npCommunicationId}
-          art={item.gameArtUrl || item.trophyTitleIconUrl}
-          platform={item.trophyTitlePlatform}
-          progress={item.progress}
+          art={item.art || item.icon}
+          versions={item.versions} // The component calculates the best version itself now
           numColumns={gridColumns}
-          justUpdated={false} // Simplify for now
-          counts={counts}
+          justUpdated={false}
           isPinned={isPinned}
-          onPin={() => togglePin(item.npCommunicationId)}
-          isPeeking={activePeekId === item.npCommunicationId}
+          onPin={() => togglePin(item.id)} // Use Group ID
+          isPeeking={activePeekId === item.id}
           onTogglePeek={() =>
-            setActivePeekId((prev) =>
-              prev === item.npCommunicationId ? null : item.npCommunicationId
-            )
+            setActivePeekId((prev) => (prev === item.id ? null : item.id))
           }
         />
       );
     }
 
+    // LIST view (GameCard handles the stack internally)
     return (
       <GameCard
-        id={item.npCommunicationId}
-        title={item.trophyTitleName}
-        icon={item.trophyTitleIconUrl}
-        art={item.gameArtUrl}
-        platform={item.trophyTitlePlatform}
-        progress={item.progress}
-        lastPlayed={item.lastUpdatedDateTime}
-        counts={counts}
-        justUpdated={false}
+        title={item.title}
+        icon={item.icon}
+        art={item.art}
+        versions={item.versions} // 👈 Passing the full stack
         isPinned={isPinned}
-        onPin={() => togglePin(item.npCommunicationId)}
+        onPin={(id) => togglePin(id)}
       />
     );
   };
@@ -259,10 +252,14 @@ export default function HomeScreen() {
           onSortDirectionChange={() =>
             setSortDirection((prev) => (prev === "ASC" ? "DESC" : "ASC"))
           }
+          ownershipMode={ownershipMode} // 👈 Pass it
+          onOwnershipChange={setOwnershipMode} // 👈 Pass setter
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onFilterChange={setFilterMode}
           filterMode={filterMode}
+          showShovelware={showShovelware}
+          onToggleShovelware={() => setShowShovelware((prev) => !prev)}
         />
       </Animated.View>
 
@@ -276,7 +273,7 @@ export default function HomeScreen() {
             ref={flatListRef}
             key={viewMode === "GRID" ? `grid-${gridColumns}` : "list"}
             data={sortedList}
-            keyExtractor={(item: any) => String(item.npCommunicationId)}
+            keyExtractor={(item: any) => item.id}
             renderItem={renderItem}
             numColumns={viewMode === "GRID" ? gridColumns : 1}
             refreshing={refreshing}

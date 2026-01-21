@@ -1,7 +1,7 @@
 // components/trophies/GameCard.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { memo, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -14,49 +14,14 @@ import {
 import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
 
-// ---------------------------------------------------------------------------
-// ASSETS
-// ---------------------------------------------------------------------------
+// ... Assets ...
 const ICONS = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
-
 const IMG_SIZE = 124;
-
-// ---------------------------------------------------------------------------
-// TYPES
-// ---------------------------------------------------------------------------
-
-type GameCardProps = {
-  id: string;
-  title: string;
-  icon: string;
-  art?: string;
-  platform: string;
-  progress: number;
-  lastPlayed?: string;
-  counts: {
-    total: number;
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-    earnedBronze: number;
-    earnedSilver: number;
-    earnedGold: number;
-    earnedPlatinum: number;
-  };
-  justUpdated?: boolean;
-  isPinned?: boolean;
-  onPin?: () => void;
-};
-
-// ---------------------------------------------------------------------------
-// SUB-COMPONENT: Stat Item
-// ---------------------------------------------------------------------------
 
 type StatItemProps = {
   icon: ImageSourcePropType;
@@ -78,58 +43,114 @@ const StatItem = ({ icon, earned, total, disabled = false }: StatItemProps) => (
   </View>
 );
 
-// ---------------------------------------------------------------------------
-// MAIN COMPONENT
-// ---------------------------------------------------------------------------
+export type GameVersion = {
+  id: string;
+  platform: string;
+  progress: number;
+  lastPlayed?: string;
+  region?: string;
+  counts: {
+    total: number;
+    bronze: number;
+    silver: number;
+    gold: number;
+    platinum: number;
+    earnedBronze: number;
+    earnedSilver: number;
+    earnedGold: number;
+    earnedPlatinum: number;
+  };
+  isOwned: boolean;
+};
+
+type GameCardProps = {
+  title: string;
+  icon: string;
+  art?: string;
+  versions: GameVersion[];
+  justUpdated?: boolean;
+  isPinned?: boolean;
+  onPin?: (id: string) => void;
+};
 
 const GameCard = ({
-  id,
   title,
   icon,
   art,
-  platform,
-  progress,
-  lastPlayed,
-  counts,
+  versions,
   justUpdated,
   isPinned,
   onPin,
 }: GameCardProps) => {
   const router = useRouter();
+
+  // 1. GROUP VERSIONS BY PLATFORM (Deduplicate Platforms)
+  const groupedVersions = useMemo(() => {
+    const groups: Record<string, GameVersion[]> = {};
+    versions.forEach((v) => {
+      if (!groups[v.platform]) groups[v.platform] = [];
+      groups[v.platform].push(v);
+    });
+    return groups;
+  }, [versions]);
+
+  // Sort: PS5 first, then others
+  const uniquePlatforms = Object.keys(groupedVersions).sort((a, b) => {
+    if (a === "PS5") return -1;
+    if (b === "PS5") return 1;
+    return 0;
+  });
+
+  // 2. STATE
+  const [activePlatform, setActivePlatform] = useState(uniquePlatforms[0]);
+  const [activeVariantIndex, setActiveVariantIndex] = useState(0);
+
+  // If versions change (e.g. search filter), reset
+  useEffect(() => {
+    if (!uniquePlatforms.includes(activePlatform)) {
+      setActivePlatform(uniquePlatforms[0]);
+    }
+  }, [uniquePlatforms]);
+
+  // Reset variant index when platform changes
+  useEffect(() => {
+    setActiveVariantIndex(0);
+  }, [activePlatform]);
+
+  const currentStack = groupedVersions[activePlatform] || [];
+  const activeVer = currentStack[activeVariantIndex] || versions[0];
+
+  const cycleVariant = (e: any) => {
+    e.stopPropagation();
+    setActiveVariantIndex((prev) => (prev + 1) % currentStack.length);
+  };
+
+  // Image & Animation Logic
   const [loadIcon, setLoadIcon] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
-
-  // Smart Art Logic
   const displayImage = art || icon;
   const isSpecialArt = art && art !== icon;
-  const isSquareFormat = platform === "PS5" || isSpecialArt;
+  const isSquareFormat = activeVer.platform === "PS5" || isSpecialArt;
   const imageResizeMode = isSquareFormat ? "cover" : "contain";
-
-  // Lazy load image delay (performance optimization for long lists)
+  const totalEarned =
+    activeVer.counts.earnedBronze +
+    activeVer.counts.earnedSilver +
+    activeVer.counts.earnedGold +
+    activeVer.counts.earnedPlatinum;
+  const hasStarted = totalEarned > 0;
+  const currentVariant = currentStack[activeVariantIndex];
   useEffect(() => {
-    const t = setTimeout(() => setLoadIcon(true), 50);
-    return () => clearTimeout(t);
+    setTimeout(() => setLoadIcon(true), 50);
   }, []);
-
-  // "Just Updated" Flash Animation
   useEffect(() => {
     if (justUpdated) {
       Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: false,
-        }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 300, useNativeDriver: false }),
         Animated.delay(2000),
-        Animated.timing(glowAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1000, useNativeDriver: false }),
       ]).start();
     }
   }, [justUpdated]);
-
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 0.8)"],
@@ -142,12 +163,12 @@ const GameCard = ({
         onPress={() =>
           router.push({
             pathname: "/game/[id]",
-            params: { id, artParam: displayImage },
+            params: { id: activeVer.id, artParam: displayImage },
           })
         }
       >
         <Animated.View style={[styles.cardContainer, { borderColor, borderWidth: 1 }]}>
-          {/* COLUMN 1: Image & Platform */}
+          {/* COLUMN 1: Image & Controls */}
           <View style={styles.imageColumn}>
             <View style={styles.imageWrapper}>
               {loadIcon && (
@@ -158,57 +179,105 @@ const GameCard = ({
                 />
               )}
             </View>
-            {platform ? (
-              <View style={styles.platformBadge}>
-                <Text style={styles.platformText}>{platform}</Text>
-              </View>
-            ) : null}
+
+            {/* TIER 1: PLATFORM BADGES */}
+            <View style={styles.versionRow}>
+              {uniquePlatforms.map((plat) => (
+                <TouchableOpacity
+                  key={plat}
+                  style={[
+                    styles.versionBadge,
+                    activePlatform === plat
+                      ? styles.versionActive
+                      : styles.versionInactive,
+                  ]}
+                  onPress={() => setActivePlatform(plat)}
+                >
+                  <Text
+                    style={[
+                      styles.versionText,
+                      activePlatform === plat ? { color: "white" } : { color: "#888" },
+                    ]}
+                  >
+                    {plat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* TIER 2: VARIANT TOGGLE (Only if multiple variants exist) */}
+            {currentStack.length > 1 && (
+              <TouchableOpacity style={styles.regionBadge} onPress={cycleVariant}>
+                <MaterialCommunityIcons
+                  name="earth"
+                  size={10}
+                  color="#ccc"
+                  style={{ marginRight: 2 }}
+                />
+                <Text style={styles.regionText}>
+                  {/* 🔽 DISPLAY REGION */}
+                  {currentVariant.region || `Ver ${activeVariantIndex + 1}`}
+                </Text>
+                <MaterialCommunityIcons
+                  name="refresh"
+                  size={10}
+                  color="#4da3ff"
+                  style={{ marginLeft: 4 }}
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* COLUMN 2: Info & Stats */}
+          {/* COLUMN 2: Info */}
           <View style={[styles.infoColumn, { height: IMG_SIZE }]}>
             <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
               {title}
             </Text>
-
-            {/* Stats Row */}
             <View style={styles.statsRow}>
-              {/* Platinum (Ghost if 0) */}
               <StatItem
                 icon={ICONS.platinum}
-                earned={counts.earnedPlatinum}
-                total={counts.platinum}
-                disabled={counts.platinum === 0}
+                earned={activeVer.counts.earnedPlatinum}
+                total={activeVer.counts.platinum}
+                disabled={activeVer.counts.platinum === 0}
               />
               <StatItem
                 icon={ICONS.gold}
-                earned={counts.earnedGold}
-                total={counts.gold}
+                earned={activeVer.counts.earnedGold}
+                total={activeVer.counts.gold}
               />
               <StatItem
                 icon={ICONS.silver}
-                earned={counts.earnedSilver}
-                total={counts.silver}
+                earned={activeVer.counts.earnedSilver}
+                total={activeVer.counts.silver}
               />
               <StatItem
                 icon={ICONS.bronze}
-                earned={counts.earnedBronze}
-                total={counts.bronze}
+                earned={activeVer.counts.earnedBronze}
+                total={activeVer.counts.bronze}
               />
             </View>
-
-            <Text style={styles.dateText}>Last Earned: {formatDate(lastPlayed)}</Text>
+            {hasStarted ? (
+              <Text style={styles.dateText}>
+                Last Earned: {formatDate(activeVer.lastPlayed)}
+              </Text>
+            ) : (
+              <Text style={[styles.dateText, { opacity: 0.5 }]}>
+                {activeVer.isOwned ? "Not Started" : "Unowned"}
+              </Text>
+            )}
           </View>
 
           {/* COLUMN 3: Progress */}
           <View style={styles.circleColumn}>
-            <ProgressCircle progress={progress} size={42} strokeWidth={3} />
+            <ProgressCircle progress={activeVer.progress} size={42} strokeWidth={3} />
           </View>
         </Animated.View>
       </TouchableOpacity>
-
-      {/* Pin Button */}
-      <TouchableOpacity onPress={onPin} style={styles.pinButton} hitSlop={12}>
+      <TouchableOpacity
+        onPress={() => onPin?.(activeVer.id)}
+        style={styles.pinButton}
+        hitSlop={12}
+      >
         <MaterialCommunityIcons
           name={isPinned ? "pin" : "pin-outline"}
           size={16}
@@ -221,14 +290,8 @@ const GameCard = ({
 
 export default memo(GameCard);
 
-// ---------------------------------------------------------------------------
-// STYLES
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
-  wrapper: {
-    position: "relative",
-  },
+  wrapper: { position: "relative" },
   cardContainer: {
     flexDirection: "row",
     backgroundColor: "#1e1e2d",
@@ -238,91 +301,70 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
-  // Column 1
-  imageColumn: {
-    position: "relative",
-    marginRight: 14,
-  },
+  imageColumn: { position: "relative", marginRight: 14, alignItems: "center" },
   imageWrapper: {
     width: IMG_SIZE,
     height: IMG_SIZE,
     borderRadius: 8,
-    backgroundColor: "#111", // darker placeholder
+    backgroundColor: "#111",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  platformBadge: {
+  image: { width: "100%", height: "100%" },
+
+  // TIER 1: Platform Row
+  versionRow: {
     position: "absolute",
     bottom: 4,
     left: 4,
+    flexDirection: "row",
     backgroundColor: "rgba(0,0,0,0.85)",
     borderRadius: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 5,
+    padding: 2,
+    gap: 2,
   },
-  platformText: {
-    color: "white",
-    fontSize: 9,
-    fontWeight: "bold",
-    textTransform: "uppercase",
+  versionBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  versionActive: { backgroundColor: "#4da3ff" },
+  versionInactive: { backgroundColor: "transparent" },
+  versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
+
+  // TIER 2: Region Badge
+  regionBadge: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
-  // Column 2
+  regionText: { color: "#ccc", fontSize: 9, fontWeight: "700" },
+
   infoColumn: {
     flex: 1,
     justifyContent: "space-between",
     paddingVertical: 6,
     marginRight: 8,
   },
-  title: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-    paddingRight: 24,
-  },
+  title: { color: "#fff", fontSize: 15, fontWeight: "700", paddingRight: 24 },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 0,
   },
-  // Stat Item
-  statItemContainer: {
-    width: 44,
-    alignItems: "center",
-    marginRight: 4,
-  },
-  statItemDisabled: {
-    opacity: 0.5,
-  },
-  statIcon: {
-    width: 24,
-    height: 24,
-    marginBottom: 2,
-  },
-  statTotal: {
-    color: "#666",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  statEarned: {
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  // Column 3 & Misc
-  circleColumn: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingRight: 4,
-  },
-  dateText: {
-    color: "#888",
-    fontSize: 11,
-  },
+  statItemContainer: { width: 44, alignItems: "center", marginRight: 4 },
+  statItemDisabled: { opacity: 0.5 },
+  statIcon: { width: 24, height: 24, marginBottom: 2 },
+  statTotal: { color: "#666", fontSize: 11, fontWeight: "600" },
+  statEarned: { fontWeight: "800", fontSize: 13 },
+  circleColumn: { justifyContent: "center", alignItems: "center", paddingRight: 4 },
+  dateText: { color: "#888", fontSize: 11 },
   pinButton: {
     position: "absolute",
     top: 8,

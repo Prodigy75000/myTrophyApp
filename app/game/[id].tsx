@@ -1,10 +1,9 @@
 // app/game/[id].tsx
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// Custom Hooks & Components
 import TrophySkeleton from "../../components/skeletons/TrophySkeleton";
 import GameHero from "../../components/trophies/GameHero";
 import TrophyActionSheet from "../../components/trophies/TrophyActionSheet";
@@ -15,6 +14,9 @@ import TrophyListHeader, {
 } from "../../components/trophies/TrophyListHeader";
 import { useGameDetails } from "../../hooks/useGameDetails";
 import { normalizeTrophyType } from "../../utils/normalizeTrophy";
+
+// ⚠️ IMPORT MASTER DATA (Essential for Sibling/Region Lookup)
+import masterGamesRaw from "../../data/master_games.json";
 
 const HEADER_HEIGHT = 60;
 
@@ -42,6 +44,43 @@ export default function GameScreen() {
     justEarnedIds,
   } = useGameDetails(gameId, searchText, sortMode, sortDirection);
 
+  // --- 🧠 SIBLING & REGION LOGIC ---
+  const versions = useMemo(() => {
+    if (!gameId) return [];
+
+    // 1. Find Master Entry
+    const entry = (masterGamesRaw as any[]).find((g) =>
+      g.linkedVersions?.some((v: any) => v.npCommunicationId === gameId)
+    );
+
+    let rawList = [];
+
+    if (entry && entry.linkedVersions) {
+      // 2. Map Data (INCLUDING REGION!)
+      rawList = entry.linkedVersions.map((v: any) => ({
+        id: v.npCommunicationId,
+        platform: v.platform,
+        region: v.region, // 👈 THIS IS THE MISSING LINK
+      }));
+    } else {
+      // Fallback
+      rawList = [
+        {
+          id: gameId,
+          platform: game ? game.trophyTitlePlatform : "PSN",
+        },
+      ];
+    }
+
+    // 3. Deduplicate (Just in case)
+    const uniqueMap = new Map();
+    rawList.forEach((v: any) => {
+      if (!uniqueMap.has(v.id)) uniqueMap.set(v.id, v);
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [gameId, game]);
+
   // --- ANIMATION ---
   const scrollY = useRef(new Animated.Value(0)).current;
   const totalHeaderHeight = HEADER_HEIGHT + insets.top;
@@ -55,7 +94,6 @@ export default function GameScreen() {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // Auto-collapse completed groups logic
   useEffect(() => {
     if (!groupedData) return;
     const completed = new Set<string>();
@@ -63,7 +101,7 @@ export default function GameScreen() {
       if (g.progress === 100) completed.add(g.id);
     });
     setCollapsedGroups(completed);
-  }, [groupedData]); // Runs only when data structure changes
+  }, [groupedData]);
 
   const toggleGroup = (id: string) => {
     setCollapsedGroups((prev) => {
@@ -77,7 +115,6 @@ export default function GameScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 1. FLOATING HEADER */}
       <Animated.View
         style={[
           styles.headerContainer,
@@ -100,7 +137,6 @@ export default function GameScreen() {
         />
       </Animated.View>
 
-      {/* 2. SCROLL CONTENT */}
       <Animated.ScrollView
         contentContainerStyle={{ paddingTop: totalHeaderHeight, paddingBottom: 40 }}
         refreshControl={
@@ -123,9 +159,11 @@ export default function GameScreen() {
           earnedTrophies={game.earnedTrophies}
           definedTrophies={game.definedTrophies}
           displayArt={typeof artParam === "string" ? artParam : null}
+          // 🔽 PASSING THE VERSIONS (Now with regions!)
+          versions={versions}
+          activeId={gameId}
         />
 
-        {/* LOADING SKELETONS */}
         {isInitialLoading && (
           <View>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -134,7 +172,6 @@ export default function GameScreen() {
           </View>
         )}
 
-        {/* LIST RENDERER */}
         <View>
           {sortMode === "DEFAULT" && groupedData
             ? groupedData.map((group: any) => {
@@ -169,7 +206,6 @@ export default function GameScreen() {
         </View>
       </Animated.ScrollView>
 
-      {/* 3. MODAL */}
       <TrophyActionSheet
         visible={!!selectedTrophy}
         onClose={() => setSelectedTrophy(null)}
@@ -182,7 +218,6 @@ export default function GameScreen() {
   );
 }
 
-// Helper to map API data to Component Props
 const mapTrophyToProps = (
   trophy: any,
   justEarnedIds: Set<number>,

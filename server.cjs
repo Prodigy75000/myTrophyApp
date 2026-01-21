@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+dotenv.config();
 const {
   getServiceAuth,
   fetchWithAutoRefresh,
@@ -9,8 +10,6 @@ const {
 } = require("./config/psn");
 const { mergeTrophies, enrichTitlesWithArtwork } = require("./utils/trophyHelpers");
 const { getProfileFromUserName } = require("psn-api");
-
-dotenv.config();
 
 const app = express();
 app.use(cors());

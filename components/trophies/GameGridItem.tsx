@@ -1,6 +1,7 @@
+// components/trophies/GameGridItem.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -12,8 +13,8 @@ import {
   View,
 } from "react-native";
 import ProgressCircle from "../ProgressCircle";
+import { GameVersion } from "./GameCard";
 
-// Import icons locally
 const trophyIcons = {
   bronze: require("../../assets/icons/trophies/bronze.png"),
   silver: require("../../assets/icons/trophies/silver.png"),
@@ -22,45 +23,21 @@ const trophyIcons = {
 };
 
 type Props = {
-  id: string;
   art: string;
-  platform: string;
-  progress: number;
+  versions: GameVersion[];
   numColumns: number;
   justUpdated?: boolean;
-  counts?: {
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-    earnedBronze: number;
-    earnedSilver: number;
-    earnedGold: number;
-    earnedPlatinum: number;
-  };
   isPinned?: boolean;
-  onPin?: () => void;
+  onPin?: (id: string) => void;
   isPeeking?: boolean;
   onTogglePeek?: () => void;
 };
 
 const GameGridItem = ({
-  id,
   art,
-  platform,
-  progress,
+  versions,
   numColumns,
   justUpdated,
-  counts = {
-    bronze: 0,
-    silver: 0,
-    gold: 0,
-    platinum: 0,
-    earnedBronze: 0,
-    earnedSilver: 0,
-    earnedGold: 0,
-    earnedPlatinum: 0,
-  },
   isPinned,
   onPin,
   isPeeking = false,
@@ -69,15 +46,53 @@ const GameGridItem = ({
   const router = useRouter();
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // ⏱️ TIMING REF for Double Tap
+  // -------------------------------------------------------------------------
+  // 1. SMART GROUPING (Collapse Variants, Keep Platforms)
+  // -------------------------------------------------------------------------
+  const groupedVersions = useMemo(() => {
+    const groups: Record<string, GameVersion[]> = {};
+    if (!versions) return {};
+    versions.forEach((v) => {
+      if (!groups[v.platform]) groups[v.platform] = [];
+      groups[v.platform].push(v);
+    });
+
+    // Sort versions within each platform by progress (High -> Low)
+    // This ensures we always show the "Best" variant for that platform
+    Object.keys(groups).forEach((plat) => {
+      groups[plat].sort((a, b) => b.progress - a.progress);
+    });
+
+    return groups;
+  }, [versions]);
+
+  const uniquePlatforms = Object.keys(groupedVersions).sort((a, b) => {
+    if (a === "PS5") return -1;
+    if (b === "PS5") return 1;
+    return 0;
+  });
+
+  // -------------------------------------------------------------------------
+  // 2. STATE
+  // -------------------------------------------------------------------------
+  // Default to the first platform (usually PS5 due to sort)
+  const [activePlatform, setActivePlatform] = useState(uniquePlatforms[0] || "PS4");
+
+  // Get the "Best" variant for the active platform
+  const activeVer = groupedVersions[activePlatform]?.[0] || versions[0];
+
+  const handlePlatformPress = (e: any, plat: string) => {
+    e.stopPropagation(); // Don't trigger navigation
+    setActivePlatform(plat);
+  };
+
+  // -------------------------------------------------------------------------
+  // 3. ANIMATION & SIZE
+  // -------------------------------------------------------------------------
   const lastTapRef = useRef<number>(0);
-
   const screenWidth = Dimensions.get("window").width;
-
-  // 📏 SIZE CALCULATION (Zero Padding)
   const size = screenWidth / numColumns;
-
-  const isPS5 = platform === "PS5";
+  const isPS5 = activeVer?.platform === "PS5";
   const dynamicResizeMode = isPS5 ? "cover" : "contain";
 
   useEffect(() => {
@@ -95,33 +110,33 @@ const GameGridItem = ({
     outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 1)"],
   });
 
-  // ⚡ INTERACTION LOGIC
+  // -------------------------------------------------------------------------
+  // 4. INTERACTION
+  // -------------------------------------------------------------------------
   const handlePress = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 800;
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // ✅ DOUBLE TAP -> Navigate
+      // Pass the specific ID of the active version
       router.push({
         pathname: "/game/[id]",
-        params: { id, artParam: art },
+        params: { id: activeVer.id, artParam: art },
       });
       lastTapRef.current = 0;
     } else {
-      // ✅ SINGLE TAP -> Toggle Peek
       if (onTogglePeek) onTogglePeek();
       lastTapRef.current = now;
     }
   };
 
+  if (!activeVer) return null;
+
   return (
     <View style={{ width: size, height: size, padding: 0.5 }}>
       <Pressable
         onPress={handlePress}
-        style={({ pressed }) => ({
-          flex: 1,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
-        })}
+        style={({ pressed }) => ({ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}
       >
         <Animated.View
           style={{
@@ -141,57 +156,81 @@ const GameGridItem = ({
             style={{ width: "100%", height: "100%" }}
             resizeMode={dynamicResizeMode}
           />
-
           {isPS5 && <View style={styles.overlay} />}
 
           {/* 👁️ PEEK OVERLAY */}
           {isPeeking && (
             <View style={styles.peekOverlay}>
               <View style={styles.peekContent}>
-                {counts.platinum > 0 && (
+                {activeVer.counts.platinum > 0 && (
                   <PeekRow
                     icon={trophyIcons.platinum}
-                    earned={counts.earnedPlatinum}
-                    total={counts.platinum}
+                    earned={activeVer.counts.earnedPlatinum}
+                    total={activeVer.counts.platinum}
                   />
                 )}
                 <PeekRow
                   icon={trophyIcons.gold}
-                  earned={counts.earnedGold}
-                  total={counts.gold}
+                  earned={activeVer.counts.earnedGold}
+                  total={activeVer.counts.gold}
                 />
                 <PeekRow
                   icon={trophyIcons.silver}
-                  earned={counts.earnedSilver}
-                  total={counts.silver}
+                  earned={activeVer.counts.earnedSilver}
+                  total={activeVer.counts.silver}
                 />
                 <PeekRow
                   icon={trophyIcons.bronze}
-                  earned={counts.earnedBronze}
-                  total={counts.bronze}
+                  earned={activeVer.counts.earnedBronze}
+                  total={activeVer.counts.bronze}
                 />
               </View>
             </View>
           )}
 
-          {/* Standard UI (Hidden while peeking) */}
-          {!isPeeking && platform ? (
-            <View style={styles.platformBadge}>
-              <Text style={styles.badgeText}>{platform}</Text>
+          {/* 🔽 INTERACTIVE PLATFORM TOGGLES 🔽 */}
+          {!isPeeking && (
+            <View style={styles.versionRow}>
+              {uniquePlatforms.map((plat) => {
+                const isActive = activePlatform === plat;
+                return (
+                  <Pressable
+                    key={plat}
+                    style={[
+                      styles.versionBadge,
+                      isActive ? styles.versionActive : styles.versionInactive,
+                    ]}
+                    onPress={(e) => handlePlatformPress(e, plat)}
+                  >
+                    <Text
+                      style={[
+                        styles.badgeText,
+                        isActive ? { color: "white" } : { color: "#888" },
+                      ]}
+                    >
+                      {plat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          ) : null}
+          )}
 
+          {/* Progress Circle */}
           {!isPeeking && (
             <View style={styles.progressContainer}>
-              <ProgressCircle progress={progress} size={36} strokeWidth={3} />
+              <ProgressCircle progress={activeVer.progress} size={36} strokeWidth={3} />
             </View>
           )}
         </Animated.View>
       </Pressable>
 
-      {/* 📌 PIN ICON: Show if Pinned OR Peeking */}
       {(isPinned || isPeeking) && (
-        <TouchableOpacity onPress={onPin} style={styles.pinButton} hitSlop={10}>
+        <TouchableOpacity
+          onPress={() => onPin?.(activeVer.id)}
+          style={styles.pinButton}
+          hitSlop={10}
+        >
           <MaterialCommunityIcons
             name={isPinned ? "pin" : "pin-outline"}
             size={14}
@@ -203,7 +242,6 @@ const GameGridItem = ({
   );
 };
 
-// 🎨 PEEK ROW
 const PeekRow = ({ icon, earned, total }: any) => (
   <View style={styles.peekRow}>
     <Image source={icon} style={styles.peekIcon} resizeMode="contain" />
@@ -215,25 +253,19 @@ const PeekRow = ({ icon, earned, total }: any) => (
 );
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.1)",
-  },
-  platformBadge: {
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.1)" },
+  versionRow: {
     position: "absolute",
     bottom: 4,
     left: 4,
-    backgroundColor: "rgba(0,0,0,0.85)",
-    paddingVertical: 1,
-    paddingHorizontal: 4,
-    borderRadius: 2,
+    flexDirection: "row",
+    gap: 2,
+    zIndex: 10,
   },
-  badgeText: {
-    color: "white",
-    fontSize: 8,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-  },
+  versionBadge: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 2 },
+  versionActive: { backgroundColor: "#4da3ff" },
+  versionInactive: { backgroundColor: "rgba(0,0,0,0.85)" },
+  badgeText: { fontSize: 8, fontWeight: "bold", textTransform: "uppercase" },
   progressContainer: {
     position: "absolute",
     bottom: 4,
@@ -249,23 +281,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 99,
   },
-  peekContent: {
-    gap: 4,
-    alignItems: "flex-start",
-  },
-  peekRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  peekIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 6,
-  },
-  peekText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  peekContent: { gap: 4, alignItems: "flex-start" },
+  peekRow: { flexDirection: "row", alignItems: "center" },
+  peekIcon: { width: 16, height: 16, marginRight: 6 },
+  peekText: { fontSize: 12, fontWeight: "600" },
   pinButton: {
     position: "absolute",
     top: 2,
@@ -276,7 +295,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
-    // Ensure it stays above the peek overlay (which is zIndex 99)
     zIndex: 100,
   },
 });

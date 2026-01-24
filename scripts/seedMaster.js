@@ -16,7 +16,7 @@ dotenv.config();
 // CONFIGURATION
 // ---------------------------------------------------------------------------
 
-const SEED_USERS = [];
+const SEED_USERS = ["PowerPyx"];
 
 // Use process.cwd() to fix the directory path issue
 const OUTPUT_FILE = path.join(process.cwd(), "data", "raw_master_db.json");

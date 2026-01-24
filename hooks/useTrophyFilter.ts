@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type {
   FilterMode,
   OwnershipMode,
+  PlatformFilter,
   SortDirection,
   SortMode,
 } from "../components/HeaderActionBar";
@@ -33,7 +34,8 @@ export function useTrophyFilter(
   sortMode: SortMode,
   sortDirection: SortDirection,
   pinnedIds: Set<string>,
-  showShovelware: boolean // 👈 NEW PARAM
+  showShovelware: boolean,
+  platforms: PlatformFilter
 ) {
   // 1. CALCULATE STATS
   const userStats = useMemo(() => {
@@ -75,13 +77,22 @@ export function useTrophyFilter(
     const rawUserGames = userTrophies?.trophyTitles || [];
     const groupedMap = new Map<string, any>();
 
+    const isPlatformEnabled = (plat: string) => {
+      if (plat === "PS5" && platforms.PS5) return true;
+      if (plat === "PS4" && platforms.PS4) return true;
+      if (plat === "PS3" && platforms.PS3) return true;
+      if ((plat === "PSVITA" || plat === "PS Vita") && platforms.PSVITA) return true;
+      return false;
+    };
+
     // A. Process Owned Games
     rawUserGames.forEach((game: any) => {
+      if (!isPlatformEnabled(game.trophyTitlePlatform)) return;
+
       const masterEntry = masterLookup.get(game.npCommunicationId);
-      // 🛡️ CRASH FIX: Ensure valid ID. Use Master ID -> fallback to Game ID -> fallback to random (rare)
       const groupKey =
         masterEntry?.canonicalId || game.npCommunicationId || `err_${Math.random()}`;
-      // 1. Try to find specific region info from Master Data
+
       let regionTag = undefined;
       if (masterEntry?.linkedVersions) {
         const specificVer = masterEntry.linkedVersions.find(
@@ -89,13 +100,37 @@ export function useTrophyFilter(
         );
         if (specificVer?.region) regionTag = specificVer.region;
       }
+
+      // 🟢 IMAGE PRIORITY (THE OVERRIDE SYSTEM) 🟢
+      const manualArt = masterEntry?.art;
+
+      // 1. GRID ICON (Mosaic)
+      // Priority:
+      //   A. 'storesquare' in JSON (Manual Override)
+      //   B. 'trophyTitleIconUrl' from API (Auto-detected Master/4:3 from backend)
+      //   C. 'square' in JSON (Legacy fallback)
+      const displayIcon =
+        manualArt?.storesquare ||
+        game.trophyTitleIconUrl ||
+        manualArt?.square ||
+        manualArt?.grid;
+
+      // 2. HERO ART (Game Details Header)
+      // Priority:
+      //   A. 'hero' in JSON (Manual Override)
+      //   B. 'gameArtUrl' from API (Auto-detected Master from backend)
+      //   C. 'master' in JSON (Legacy fallback)
+      //   D. displayIcon (Last resort)
+      const displayArt =
+        manualArt?.hero || game.gameArtUrl || manualArt?.master || displayIcon;
+
       if (!groupedMap.has(groupKey)) {
         groupedMap.set(groupKey, {
-          id: groupKey, // 👈 THE FIX for "undefined key"
+          id: groupKey,
           title: masterEntry ? masterEntry.displayName : game.trophyTitleName,
-          icon: masterEntry?.art?.square || game.trophyTitleIconUrl,
-          art: masterEntry?.art?.square || game.gameArtUrl,
-          tags: masterEntry?.tags || [], // Import tags for filtering
+          icon: displayIcon,
+          art: displayArt,
+          tags: masterEntry?.tags || [],
           versions: [],
         });
       }
@@ -103,6 +138,7 @@ export function useTrophyFilter(
       groupedMap.get(groupKey).versions.push({
         id: game.npCommunicationId,
         platform: game.trophyTitlePlatform,
+        region: regionTag,
         progress: game.progress,
         lastPlayed: game.lastUpdatedDateTime,
         counts: getCounts(game),
@@ -117,11 +153,22 @@ export function useTrophyFilter(
         if (!groupKey) return;
 
         if (!groupedMap.has(groupKey)) {
+          const mArt = masterGame.art;
+          const mConcept = masterGame.concept?.media?.images;
+
+          // Try Manual -> Try Concept Square -> Fallback null
+          const autoIcon = mConcept?.find((i: any) => i.type === "SQUARE_ICON")?.url;
+
+          // Apply same priority logic for Unowned
+          const icon =
+            mArt?.storesquare || mArt?.square || autoIcon || masterGame.iconUrl;
+          const art = mArt?.hero || mArt?.master || mArt?.square || autoIcon;
+
           const newItem = {
             id: groupKey,
             title: masterGame.displayName,
-            icon: masterGame.art.square,
-            art: masterGame.art.square,
+            icon: icon,
+            art: art,
             tags: masterGame.tags || [],
             versions: [],
           };
@@ -130,10 +177,12 @@ export function useTrophyFilter(
 
         const group = groupedMap.get(groupKey);
         masterGame.linkedVersions?.forEach((v: any) => {
+          if (!isPlatformEnabled(v.platform)) return;
           if (!group.versions.some((gv: any) => gv.id === v.npCommunicationId)) {
             group.versions.push({
               id: v.npCommunicationId,
               platform: v.platform,
+              region: v.region,
               progress: 0,
               lastPlayed: null,
               counts: {
@@ -154,7 +203,6 @@ export function useTrophyFilter(
       });
     }
 
-    // Convert to Array
     let combinedList = Array.from(groupedMap.values()).filter(
       (g) => g.versions.length > 0
     );
@@ -189,6 +237,7 @@ export function useTrophyFilter(
     filterMode,
     ownershipMode,
     showShovelware,
+    platforms,
   ]);
 
   // 4. SORTING
@@ -200,7 +249,6 @@ export function useTrophyFilter(
       const bestA = a.versions[0];
       const bestB = b.versions[0];
 
-      // Pins
       const isPinnedA = a.versions.some((v: any) => pinnedIds.has(v.id));
       const isPinnedB = b.versions.some((v: any) => pinnedIds.has(v.id));
       if (isPinnedA && !isPinnedB) return -1;

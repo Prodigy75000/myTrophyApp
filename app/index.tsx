@@ -23,6 +23,7 @@ import { PROXY_BASE_URL } from "../config/endpoints";
 import { useTrophy } from "../providers/TrophyContext";
 
 // Custom Hooks
+import { PlatformFilter } from "../components/HeaderActionBar"; // Import type
 import { useTrophyFilter } from "../hooks/useTrophyFilter";
 // ⚠️ LOAD MASTER JSON
 // For now, assume it's in ../data/master_games.json
@@ -82,6 +83,13 @@ export default function HomeScreen() {
   const [ownershipMode, setOwnershipMode] = useState<OwnershipMode>("OWNED");
   const [showShovelware, setShowShovelware] = useState(false); // Default: Hidden
 
+  const [platforms, setPlatforms] = useState<PlatformFilter>({
+    PS5: true,
+    PS4: true,
+    PS3: true,
+    PSVITA: true,
+  });
+
   // --- 2. LOGIC HOOKS ---
   // We offload the heavy filtering/sorting to our custom hook
   const { userStats, sortedList } = useTrophyFilter(
@@ -93,8 +101,13 @@ export default function HomeScreen() {
     sortMode,
     sortDirection,
     pinnedIds,
-    showShovelware
+    showShovelware,
+    platforms
   );
+  // Helper to toggle platform
+  const togglePlatform = (key: keyof PlatformFilter) => {
+    setPlatforms((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // --- 3. EFFECTS ---
 
@@ -200,13 +213,15 @@ export default function HomeScreen() {
     if (viewMode === "GRID") {
       return (
         <GameGridItem
-          art={item.art || item.icon}
           versions={item.versions} // The component calculates the best version itself now
           numColumns={gridColumns}
           justUpdated={false}
           isPinned={isPinned}
           onPin={() => togglePin(item.id)} // Use Group ID
           isPeeking={activePeekId === item.id}
+          title={item.title}
+          icon={item.icon} // 🟢 SQUARE (Display)
+          heroArt={item.art} // 🟢 16:9 (For Navigation)
           onTogglePeek={() =>
             setActivePeekId((prev) => (prev === item.id ? null : item.id))
           }
@@ -260,6 +275,8 @@ export default function HomeScreen() {
           filterMode={filterMode}
           showShovelware={showShovelware}
           onToggleShovelware={() => setShowShovelware((prev) => !prev)}
+          platforms={platforms}
+          onTogglePlatform={togglePlatform}
         />
       </Animated.View>
 

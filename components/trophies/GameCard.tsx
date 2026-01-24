@@ -84,7 +84,6 @@ const GameCard = ({
 }: GameCardProps) => {
   const router = useRouter();
 
-  // 1. GROUP VERSIONS BY PLATFORM (Deduplicate Platforms)
   const groupedVersions = useMemo(() => {
     const groups: Record<string, GameVersion[]> = {};
     versions.forEach((v) => {
@@ -94,25 +93,21 @@ const GameCard = ({
     return groups;
   }, [versions]);
 
-  // Sort: PS5 first, then others
   const uniquePlatforms = Object.keys(groupedVersions).sort((a, b) => {
     if (a === "PS5") return -1;
     if (b === "PS5") return 1;
     return 0;
   });
 
-  // 2. STATE
   const [activePlatform, setActivePlatform] = useState(uniquePlatforms[0]);
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
 
-  // If versions change (e.g. search filter), reset
   useEffect(() => {
     if (!uniquePlatforms.includes(activePlatform)) {
       setActivePlatform(uniquePlatforms[0]);
     }
   }, [uniquePlatforms]);
 
-  // Reset variant index when platform changes
   useEffect(() => {
     setActiveVariantIndex(0);
   }, [activePlatform]);
@@ -125,13 +120,17 @@ const GameCard = ({
     setActiveVariantIndex((prev) => (prev + 1) % currentStack.length);
   };
 
-  // Image & Animation Logic
   const [loadIcon, setLoadIcon] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
-  const displayImage = art || icon;
-  const isSpecialArt = art && art !== icon;
-  const isSquareFormat = activeVer.platform === "PS5" || isSpecialArt;
-  const imageResizeMode = isSquareFormat ? "cover" : "contain";
+
+  // 🛑 FIX: Use ICON for the visual thumbnail to ensure it's square/safe.
+  // Use ART only for the navigation parameter.
+  const displayImage = icon;
+  const heroArt = art || icon; // This goes to GameScreen header
+
+  const isSquareFormat = activeVer.platform === "PS5"; // PS5 icons are natively square
+  const imageResizeMode = isSquareFormat ? "cover" : "contain"; // "contain" prevents PS4 folder icons from cropping
+
   const totalEarned =
     activeVer.counts.earnedBronze +
     activeVer.counts.earnedSilver +
@@ -139,6 +138,7 @@ const GameCard = ({
     activeVer.counts.earnedPlatinum;
   const hasStarted = totalEarned > 0;
   const currentVariant = currentStack[activeVariantIndex];
+
   useEffect(() => {
     setTimeout(() => setLoadIcon(true), 50);
   }, []);
@@ -151,6 +151,7 @@ const GameCard = ({
       ]).start();
     }
   }, [justUpdated]);
+
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 0.8)"],
@@ -163,12 +164,12 @@ const GameCard = ({
         onPress={() =>
           router.push({
             pathname: "/game/[id]",
-            params: { id: activeVer.id, artParam: displayImage },
+            // Pass the nice 16:9 art to the details screen
+            params: { id: activeVer.id, artParam: heroArt },
           })
         }
       >
         <Animated.View style={[styles.cardContainer, { borderColor, borderWidth: 1 }]}>
-          {/* COLUMN 1: Image & Controls */}
           <View style={styles.imageColumn}>
             <View style={styles.imageWrapper}>
               {loadIcon && (
@@ -180,7 +181,6 @@ const GameCard = ({
               )}
             </View>
 
-            {/* TIER 1: PLATFORM BADGES */}
             <View style={styles.versionRow}>
               {uniquePlatforms.map((plat) => (
                 <TouchableOpacity
@@ -205,7 +205,6 @@ const GameCard = ({
               ))}
             </View>
 
-            {/* TIER 2: VARIANT TOGGLE (Only if multiple variants exist) */}
             {currentStack.length > 1 && (
               <TouchableOpacity style={styles.regionBadge} onPress={cycleVariant}>
                 <MaterialCommunityIcons
@@ -215,7 +214,6 @@ const GameCard = ({
                   style={{ marginRight: 2 }}
                 />
                 <Text style={styles.regionText}>
-                  {/* 🔽 DISPLAY REGION */}
                   {currentVariant.region || `Ver ${activeVariantIndex + 1}`}
                 </Text>
                 <MaterialCommunityIcons
@@ -228,7 +226,6 @@ const GameCard = ({
             )}
           </View>
 
-          {/* COLUMN 2: Info */}
           <View style={[styles.infoColumn, { height: IMG_SIZE }]}>
             <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
               {title}
@@ -267,7 +264,6 @@ const GameCard = ({
             )}
           </View>
 
-          {/* COLUMN 3: Progress */}
           <View style={styles.circleColumn}>
             <ProgressCircle progress={activeVer.progress} size={42} strokeWidth={3} />
           </View>
@@ -312,8 +308,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   image: { width: "100%", height: "100%" },
-
-  // TIER 1: Platform Row
   versionRow: {
     position: "absolute",
     bottom: 4,
@@ -328,8 +322,6 @@ const styles = StyleSheet.create({
   versionActive: { backgroundColor: "#4da3ff" },
   versionInactive: { backgroundColor: "transparent" },
   versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
-
-  // TIER 2: Region Badge
   regionBadge: {
     position: "absolute",
     top: 4,
@@ -344,14 +336,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   regionText: { color: "#ccc", fontSize: 9, fontWeight: "700" },
-
   infoColumn: {
     flex: 1,
     justifyContent: "space-between",
     paddingVertical: 6,
     marginRight: 8,
   },
-  title: { color: "#fff", fontSize: 15, fontWeight: "700", paddingRight: 24 },
+  title: { color: "#fff", fontSize: 14, fontWeight: "700", paddingRight: 0 },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",

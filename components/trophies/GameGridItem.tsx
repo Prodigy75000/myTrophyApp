@@ -23,7 +23,9 @@ const trophyIcons = {
 };
 
 type Props = {
-  art: string;
+  title: string;
+  icon: string;
+  heroArt?: string;
   versions: GameVersion[];
   numColumns: number;
   justUpdated?: boolean;
@@ -34,7 +36,9 @@ type Props = {
 };
 
 const GameGridItem = ({
-  art,
+  title,
+  icon,
+  heroArt,
   versions,
   numColumns,
   justUpdated,
@@ -46,9 +50,7 @@ const GameGridItem = ({
   const router = useRouter();
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // -------------------------------------------------------------------------
-  // 1. SMART GROUPING (Collapse Variants, Keep Platforms)
-  // -------------------------------------------------------------------------
+  // --- Smart Grouping ---
   const groupedVersions = useMemo(() => {
     const groups: Record<string, GameVersion[]> = {};
     if (!versions) return {};
@@ -56,13 +58,9 @@ const GameGridItem = ({
       if (!groups[v.platform]) groups[v.platform] = [];
       groups[v.platform].push(v);
     });
-
-    // Sort versions within each platform by progress (High -> Low)
-    // This ensures we always show the "Best" variant for that platform
     Object.keys(groups).forEach((plat) => {
       groups[plat].sort((a, b) => b.progress - a.progress);
     });
-
     return groups;
   }, [versions]);
 
@@ -72,28 +70,24 @@ const GameGridItem = ({
     return 0;
   });
 
-  // -------------------------------------------------------------------------
-  // 2. STATE
-  // -------------------------------------------------------------------------
-  // Default to the first platform (usually PS5 due to sort)
   const [activePlatform, setActivePlatform] = useState(uniquePlatforms[0] || "PS4");
-
-  // Get the "Best" variant for the active platform
   const activeVer = groupedVersions[activePlatform]?.[0] || versions[0];
 
   const handlePlatformPress = (e: any, plat: string) => {
-    e.stopPropagation(); // Don't trigger navigation
+    e.stopPropagation();
     setActivePlatform(plat);
   };
 
-  // -------------------------------------------------------------------------
-  // 3. ANIMATION & SIZE
-  // -------------------------------------------------------------------------
   const lastTapRef = useRef<number>(0);
   const screenWidth = Dimensions.get("window").width;
   const size = screenWidth / numColumns;
+
   const isPS5 = activeVer?.platform === "PS5";
-  const dynamicResizeMode = isPS5 ? "cover" : "contain";
+
+  // 🟢 FORCE CONTAIN:
+  // Since we are now using "MASTER" (16:9) images for the grid tiles,
+  // we MUST use 'contain' to show the full image. 'cover' would zoom/crop it.
+  const dynamicResizeMode = "contain";
 
   useEffect(() => {
     if (justUpdated) {
@@ -110,18 +104,13 @@ const GameGridItem = ({
     outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 1)"],
   });
 
-  // -------------------------------------------------------------------------
-  // 4. INTERACTION
-  // -------------------------------------------------------------------------
   const handlePress = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 800;
-
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // Pass the specific ID of the active version
       router.push({
         pathname: "/game/[id]",
-        params: { id: activeVer.id, artParam: art },
+        params: { id: activeVer.id, artParam: heroArt || icon },
       });
       lastTapRef.current = 0;
     } else {
@@ -151,14 +140,22 @@ const GameGridItem = ({
             borderColor: borderColor,
           }}
         >
+          {/* 🟢 DISPLAY: Always show the Icon (Now 16:9 MASTER art, contained) */}
           <Image
-            source={{ uri: art }}
+            source={{ uri: icon }}
             style={{ width: "100%", height: "100%" }}
             resizeMode={dynamicResizeMode}
           />
           {isPS5 && <View style={styles.overlay} />}
 
-          {/* 👁️ PEEK OVERLAY */}
+          {!isPeeking && (
+            <View style={styles.titleBadge}>
+              <Text numberOfLines={2} style={styles.titleText}>
+                {title}
+              </Text>
+            </View>
+          )}
+
           {isPeeking && (
             <View style={styles.peekOverlay}>
               <View style={styles.peekContent}>
@@ -188,7 +185,6 @@ const GameGridItem = ({
             </View>
           )}
 
-          {/* 🔽 INTERACTIVE PLATFORM TOGGLES 🔽 */}
           {!isPeeking && (
             <View style={styles.versionRow}>
               {uniquePlatforms.map((plat) => {
@@ -216,7 +212,6 @@ const GameGridItem = ({
             </View>
           )}
 
-          {/* Progress Circle */}
           {!isPeeking && (
             <View style={styles.progressContainer}>
               <ProgressCircle progress={activeVer.progress} size={36} strokeWidth={3} />
@@ -254,6 +249,22 @@ const PeekRow = ({ icon, earned, total }: any) => (
 
 const styles = StyleSheet.create({
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.1)" },
+  titleBadge: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    right: 28,
+    zIndex: 5,
+  },
+  titleText: {
+    color: "white",
+    fontSize: 9,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    opacity: 0.9,
+  },
   versionRow: {
     position: "absolute",
     bottom: 4,

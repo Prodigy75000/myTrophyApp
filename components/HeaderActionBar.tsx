@@ -22,6 +22,14 @@ export type ViewMode = "LIST" | "GRID";
 export type FilterMode = "ALL" | "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
 export type OwnershipMode = "OWNED" | "UNOWNED" | "GLOBAL";
 
+// New type for Platform State
+export type PlatformFilter = {
+  PS3: boolean;
+  PS4: boolean;
+  PS5: boolean;
+  PSVITA: boolean;
+};
+
 type HeaderProps = {
   onMenuPress: () => void;
   onLocalSearch: (text: string) => void;
@@ -39,18 +47,21 @@ type HeaderProps = {
   ownershipMode: OwnershipMode;
   onOwnershipChange: (mode: OwnershipMode) => void;
 
-  // 🔽 NEW SHOVELWARE PROP
+  // Content Filters
   showShovelware: boolean;
   onToggleShovelware: () => void;
+
+  // 🔽 NEW PLATFORM PROPS
+  platforms: PlatformFilter;
+  onTogglePlatform: (key: keyof PlatformFilter) => void;
 };
 
-// ... (MenuOption component remains the same) ...
 type MenuOptionProps<T> = {
   label: string;
   value: T;
   icon: keyof typeof Ionicons.glyphMap;
   currentValue?: T;
-  isChecked?: boolean; // Added for toggle support
+  isChecked?: boolean;
   onSelect: (val: T) => void;
 };
 
@@ -62,7 +73,6 @@ function MenuOption<T>({
   isChecked,
   onSelect,
 }: MenuOptionProps<T>) {
-  // Determine selection state either by value match OR explicit boolean
   const isSelected = isChecked !== undefined ? isChecked : currentValue === value;
   const activeColor = "#4da3ff";
 
@@ -107,6 +117,8 @@ function HeaderActionBar({
   onOwnershipChange,
   showShovelware,
   onToggleShovelware,
+  platforms, // 👈
+  onTogglePlatform, // 👈
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -216,7 +228,6 @@ function HeaderActionBar({
         <Pressable style={styles.modalOverlay} onPress={() => setShowFilterMenu(false)}>
           <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
             <Text style={styles.menuHeader}>Source</Text>
-            {/* Explicitly passing <OwnershipMode> fixes type errors */}
             <MenuOption<OwnershipMode>
               label="My Library"
               value="OWNED"
@@ -241,7 +252,33 @@ function HeaderActionBar({
 
             <View style={styles.divider} />
 
-            {/* 🔽 NEW: FILTER TYPE */}
+            {/* 🔽 NEW: PLATFORM FILTERS */}
+            <Text style={styles.menuHeader}>Platforms</Text>
+            <View style={styles.platformRow}>
+              <PlatformToggle
+                label="PS5"
+                active={platforms.PS5}
+                onPress={() => onTogglePlatform("PS5")}
+              />
+              <PlatformToggle
+                label="PS4"
+                active={platforms.PS4}
+                onPress={() => onTogglePlatform("PS4")}
+              />
+              <PlatformToggle
+                label="PS3"
+                active={platforms.PS3}
+                onPress={() => onTogglePlatform("PS3")}
+              />
+              <PlatformToggle
+                label="VITA"
+                active={platforms.PSVITA}
+                onPress={() => onTogglePlatform("PSVITA")}
+              />
+            </View>
+
+            <View style={styles.divider} />
+
             <Text style={styles.menuHeader}>Content</Text>
             <MenuOption
               label="Hide Shovelware"
@@ -254,7 +291,6 @@ function HeaderActionBar({
             <View style={styles.divider} />
 
             <Text style={styles.menuHeader}>Status</Text>
-            {/* Explicitly passing <FilterMode> */}
             <MenuOption<FilterMode>
               label="All"
               value="ALL"
@@ -298,7 +334,6 @@ function HeaderActionBar({
           <View style={[styles.menuContainer, { top: insets.top + 60 }]}>
             <Text style={styles.menuHeader}>Sort Games</Text>
 
-            {/* 🟢 FIXED: Added <SortMode> generic to MenuOption */}
             <MenuOption<SortMode>
               label="Last Played"
               value="LAST_PLAYED"
@@ -356,6 +391,23 @@ function HeaderActionBar({
     </View>
   );
 }
+
+// Helper for Platform Bubbles
+const PlatformToggle = ({ label, active, onPress }: any) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={[
+      styles.platToggle,
+      active
+        ? { backgroundColor: "#4da3ff" }
+        : { backgroundColor: "#1c1c26", borderWidth: 1, borderColor: "#333" },
+    ]}
+  >
+    <Text style={[styles.platText, active ? { color: "white" } : { color: "#888" }]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
 
 export default memo(HeaderActionBar);
 
@@ -441,5 +493,25 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     textAlign: "center",
     maxWidth: 36,
+  },
+
+  // Platform Toggle Styles
+  platformRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  platToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    minWidth: 48,
+    alignItems: "center",
+  },
+  platText: {
+    fontWeight: "bold",
+    fontSize: 11,
   },
 });

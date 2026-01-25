@@ -25,6 +25,17 @@ const getCounts = (game: any) => ({
   earnedPlatinum: game.earnedTrophies?.platinum || 0,
 });
 
+// 🟢 HELPER: Normalize "PS5,PSPC" -> "PS5"
+const normalizePlatform = (raw: string | undefined | null) => {
+  if (!raw) return "UNKNOWN";
+  const p = raw.toUpperCase();
+  if (p.includes("PS5")) return "PS5"; // Catch "PS5,PSPC"
+  if (p.includes("PS4")) return "PS4";
+  if (p.includes("PS3")) return "PS3";
+  if (p.includes("VITA") || p.includes("PS VITA")) return "PSVITA";
+  return raw;
+};
+
 export function useTrophyFilter(
   userTrophies: any | null,
   masterGames: any[],
@@ -87,7 +98,11 @@ export function useTrophyFilter(
 
     // A. Process Owned Games
     rawUserGames.forEach((game: any) => {
-      if (!isPlatformEnabled(game.trophyTitlePlatform)) return;
+      // 🟢 NORMALIZE PLATFORM FIRST
+      const platform = normalizePlatform(game.trophyTitlePlatform);
+
+      // Check against normalized platform
+      if (!isPlatformEnabled(platform)) return;
 
       const masterEntry = masterLookup.get(game.npCommunicationId);
       const groupKey =
@@ -101,26 +116,14 @@ export function useTrophyFilter(
         if (specificVer?.region) regionTag = specificVer.region;
       }
 
-      // 🟢 IMAGE PRIORITY (THE OVERRIDE SYSTEM) 🟢
+      // 🟢 IMAGE PRIORITY 🟢
       const manualArt = masterEntry?.art;
-
-      // 1. GRID ICON (Mosaic)
-      // Priority:
-      //   A. 'storesquare' in JSON (Manual Override)
-      //   B. 'trophyTitleIconUrl' from API (Auto-detected Master/4:3 from backend)
-      //   C. 'square' in JSON (Legacy fallback)
       const displayIcon =
         manualArt?.storesquare ||
         game.trophyTitleIconUrl ||
         manualArt?.square ||
         manualArt?.grid;
 
-      // 2. HERO ART (Game Details Header)
-      // Priority:
-      //   A. 'hero' in JSON (Manual Override)
-      //   B. 'gameArtUrl' from API (Auto-detected Master from backend)
-      //   C. 'master' in JSON (Legacy fallback)
-      //   D. displayIcon (Last resort)
       const displayArt =
         manualArt?.hero || game.gameArtUrl || manualArt?.master || displayIcon;
 
@@ -137,7 +140,7 @@ export function useTrophyFilter(
 
       groupedMap.get(groupKey).versions.push({
         id: game.npCommunicationId,
-        platform: game.trophyTitlePlatform,
+        platform: platform, // 🟢 STORE NORMALIZED PLATFORM (Fixes Badges & Grouping)
         region: regionTag,
         progress: game.progress,
         lastPlayed: game.lastUpdatedDateTime,
@@ -155,11 +158,8 @@ export function useTrophyFilter(
         if (!groupedMap.has(groupKey)) {
           const mArt = masterGame.art;
           const mConcept = masterGame.concept?.media?.images;
-
-          // Try Manual -> Try Concept Square -> Fallback null
           const autoIcon = mConcept?.find((i: any) => i.type === "SQUARE_ICON")?.url;
 
-          // Apply same priority logic for Unowned
           const icon =
             mArt?.storesquare || mArt?.square || autoIcon || masterGame.iconUrl;
           const art = mArt?.hero || mArt?.master || mArt?.square || autoIcon;
@@ -177,11 +177,14 @@ export function useTrophyFilter(
 
         const group = groupedMap.get(groupKey);
         masterGame.linkedVersions?.forEach((v: any) => {
-          if (!isPlatformEnabled(v.platform)) return;
+          // 🟢 NORMALIZE MASTER PLATFORMS TOO
+          const platform = normalizePlatform(v.platform);
+
+          if (!isPlatformEnabled(platform)) return;
           if (!group.versions.some((gv: any) => gv.id === v.npCommunicationId)) {
             group.versions.push({
               id: v.npCommunicationId,
-              platform: v.platform,
+              platform: platform, // 🟢
               region: v.region,
               progress: 0,
               lastPlayed: null,

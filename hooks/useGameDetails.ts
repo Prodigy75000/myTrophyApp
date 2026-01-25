@@ -45,6 +45,17 @@ type TrophyGroup = {
   trophyGroupIconUrl?: string;
 };
 
+// 🟢 HELPER: Same normalization for consistency
+const normalizePlatform = (raw: string | undefined | null) => {
+  if (!raw) return "PSN";
+  const p = raw.toUpperCase();
+  if (p.includes("PS5")) return "PS5";
+  if (p.includes("PS4")) return "PS4";
+  if (p.includes("PS3")) return "PS3";
+  if (p.includes("VITA")) return "PSVITA";
+  return raw;
+};
+
 export function useGameDetails(
   gameId: string,
   searchText: string,
@@ -77,14 +88,14 @@ export function useGameDetails(
 
     if (ownedGame) {
       // ✅ Case 1: OWNED (Prioritize User Data)
-      // 🛑 FIX: Explicitly map fields to ensure they are NOT undefined
       return {
         npCommunicationId: ownedGame.npCommunicationId,
-        // Enrich with Master metadata if available
         trophyTitleName: masterEntry?.displayName || ownedGame.trophyTitleName,
         trophyTitleIconUrl: masterEntry?.art?.square || ownedGame.trophyTitleIconUrl,
-        trophyTitlePlatform: ownedGame.trophyTitlePlatform || "PSN",
-        // Fallbacks for optional fields
+
+        // 🟢 NORMALIZE HERE FOR DETAILS SCREEN
+        trophyTitlePlatform: normalizePlatform(ownedGame.trophyTitlePlatform),
+
         progress: ownedGame.progress ?? 0,
         earnedTrophies: ownedGame.earnedTrophies ?? {
           bronze: 0,
@@ -122,7 +133,10 @@ export function useGameDetails(
         npCommunicationId: gameId,
         trophyTitleName: masterEntry.displayName,
         trophyTitleIconUrl: masterEntry.art?.square || masterEntry.iconUrl,
-        trophyTitlePlatform: versionInfo?.platform || "PSN",
+
+        // 🟢 NORMALIZE HERE TOO
+        trophyTitlePlatform: normalizePlatform(versionInfo?.platform),
+
         progress: 0,
         earnedTrophies: { bronze: 0, silver: 0, gold: 0, platinum: 0 },
         definedTrophies: counts,

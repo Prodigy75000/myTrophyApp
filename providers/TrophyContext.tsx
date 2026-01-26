@@ -139,29 +139,6 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [trophies]);
 
-  // 🔎 TEMP DEBUG: verify Ragnarök trophy title entries exist in the loaded library
-  useEffect(() => {
-    const list = trophies?.trophyTitles;
-    if (!Array.isArray(list)) return;
-
-    const dump = (npwr: string) => {
-      const hit = list.find((t: any) => String(t.npCommunicationId) === String(npwr));
-      console.log(
-        `[NPWR CHECK] ${npwr}:`,
-        hit
-          ? {
-              name: hit.trophyTitleName,
-              platform: hit.trophyTitlePlatform || hit.platform, // PSN responses often use trophyTitlePlatform
-              progress: hit.progress,
-              earnedTrophies: hit.earnedTrophies,
-            }
-          : "NOT FOUND"
-      );
-    };
-
-    dump("NPWR22392_00"); // God of War Ragnarök PS5 (your master)
-    dump("NPWR26627_00"); // God of War Ragnarök PS4 (your master)
-  }, [trophies]);
   // -------------------------------------------------------------------------
   // 3. PROVIDER VALUE
   // -------------------------------------------------------------------------

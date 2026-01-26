@@ -7,25 +7,18 @@ import { formatDate } from "../../utils/formatDate";
 import { TrophyType } from "../../utils/normalizeTrophy";
 import { getRarityTier, RARITY_TIERS } from "../../utils/rarity";
 
-/**
- * Visual configuration for Trophy Side Badges.
- * Maps the TrophyType to a specific hex color.
- */
-const TROPHY_STRIPE_COLORS: Record<TrophyType, string> = {
-  bronze: "#cd7f32",
-  silver: "#c0c0c0",
-  gold: "#ffd700",
-  platinum: "#e5e4e2",
+const ICONS = {
+  bronze: require("../../assets/icons/trophies/bronze.png"),
+  silver: require("../../assets/icons/trophies/silver.png"),
+  gold: require("../../assets/icons/trophies/gold.png"),
+  platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
 // ---------------------------------------------------------------------------
 // SUB-COMPONENT: Rarity Pyramid
 // ---------------------------------------------------------------------------
 const RarityPyramid = ({ percentage }: { percentage: string }) => {
-  // Memoize tier calculation so we don't recalculate on every render
   const tier = useMemo(() => getRarityTier(percentage), [percentage]);
-
-  // Map Tier to a numeric level (1-4) for the visual stack
   const activeLevel = useMemo(() => {
     switch (tier) {
       case RARITY_TIERS.ULTRA_RARE:
@@ -35,21 +28,20 @@ const RarityPyramid = ({ percentage }: { percentage: string }) => {
       case RARITY_TIERS.RARE:
         return 2;
       default:
-        return 1; // Common
+        return 1;
     }
   }, [tier]);
 
   return (
     <View style={styles.pyramidContainer}>
-      {/* Bars stack from top (smallest) to bottom (widest) */}
       {[4, 3, 2, 1].map((level, index) => (
         <View
           key={level}
           style={[
             styles.pyramidBar,
             {
-              width: (index + 1) * 4, // 4, 8, 12, 16 width
-              opacity: activeLevel === level ? 1 : 0.2, // Light up ONLY the active tier
+              width: (index + 1) * 4,
+              opacity: activeLevel === level ? 1 : 0.2,
             },
           ]}
         />
@@ -90,7 +82,7 @@ type Props = {
   name: string;
   description: string;
   icon: string;
-  type: TrophyType; // Uses strict type "bronze" | "silver" etc.
+  type: TrophyType;
   earned: boolean;
   earnedAt?: string | null;
   rarity?: string;
@@ -116,7 +108,6 @@ export default function TrophyCard({
   const glowAnim = useRef(new Animated.Value(0)).current;
   const showProgress = progressValue && progressTarget;
 
-  // Handle the "Just Earned" flash effect
   useEffect(() => {
     if (justEarned) {
       Animated.sequence([
@@ -135,7 +126,6 @@ export default function TrophyCard({
     }
   }, [justEarned, glowAnim]);
 
-  // Interpolated Styles
   const backgroundColor = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["#1e1e2d", "#3a3a50"],
@@ -145,6 +135,9 @@ export default function TrophyCard({
     inputRange: [0, 1],
     outputRange: ["transparent", "#ffd700"],
   });
+
+  // Select icon for title row
+  const rarityIcon = ICONS[type] || ICONS.bronze;
 
   return (
     <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
@@ -162,16 +155,19 @@ export default function TrophyCard({
         <Image source={{ uri: icon }} style={styles.icon} />
 
         <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>
-            {name}
-          </Text>
+          {/* 🟢 TITLE ROW: Rarity Icon + Name */}
+          <View style={styles.titleRow}>
+            <Image source={rarityIcon} style={styles.miniRankIcon} resizeMode="contain" />
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
+          </View>
+
           <Text style={styles.description} numberOfLines={2}>
             {description}
           </Text>
 
-          {/* BOTTOM ROW: Status & Rarity */}
           <View style={styles.bottomRow}>
-            {/* LEFT: Status (Progress OR Date OR Locked) */}
             <View style={styles.statusContainer}>
               {showProgress ? (
                 <TrophyProgressBar current={progressValue} target={progressTarget!} />
@@ -182,7 +178,6 @@ export default function TrophyCard({
               )}
             </View>
 
-            {/* RIGHT: Rarity */}
             {rarity && (
               <View style={styles.rarityWrapper}>
                 <RarityPyramid percentage={rarity} />
@@ -191,14 +186,7 @@ export default function TrophyCard({
             )}
           </View>
         </View>
-
-        {/* COLORED SIDE STRIPE */}
-        <View
-          style={[
-            styles.typeBadge,
-            { backgroundColor: TROPHY_STRIPE_COLORS[type] || "#fff" },
-          ]}
-        />
+        {/* 🟢 REMOVED: Side colored stripe */}
       </Animated.View>
     </TouchableOpacity>
   );
@@ -217,18 +205,29 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: "#2a2a3d", // placeholder bg
+    backgroundColor: "#2a2a3d",
   },
   info: {
     flex: 1,
     justifyContent: "space-between",
     paddingVertical: 2,
   },
+  // 🟢 NEW TITLE ROW STYLES
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  miniRankIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 6, // Space between rank icon and name
+  },
   name: {
     color: "white",
     fontSize: 14,
     fontWeight: "700",
-    marginBottom: 4,
+    flex: 1, // Ensure text wraps nicely
   },
   description: {
     color: "#a0a0b0",
@@ -245,7 +244,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  // Progress Bar Styles
   progressWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -268,7 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "bold",
   },
-  // Text Styles
   earnedDate: {
     color: "#4caf50",
     fontSize: 11,
@@ -280,11 +277,10 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     fontWeight: "500",
   },
-  // Rarity Styles
   rarityWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.2)", // Subtle background for rarity pill
+    backgroundColor: "rgba(0,0,0,0.2)",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -295,24 +291,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 6,
   },
-  // Pyramid Styles
   pyramidContainer: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 2, // Slightly increased gap for visibility
+    gap: 2,
   },
   pyramidBar: {
     height: 2,
     backgroundColor: "#fff",
     borderRadius: 1,
-  },
-  // Side Badge
-  typeBadge: {
-    width: 4,
-    height: 32, // Fixed height looks cleaner than percentage
-    borderRadius: 2,
-    marginLeft: 10,
-    alignSelf: "center",
-    opacity: 0.8,
   },
 });

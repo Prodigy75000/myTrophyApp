@@ -71,6 +71,8 @@ type GameCardProps = {
   justUpdated?: boolean;
   isPinned?: boolean;
   onPin?: (id: string) => void;
+  // 🟢 NEW PROP
+  sourceMode?: "OWNED" | "GLOBAL" | "UNOWNED";
 };
 
 const GameCard = ({
@@ -81,6 +83,7 @@ const GameCard = ({
   justUpdated,
   isPinned,
   onPin,
+  sourceMode, // 🟢 Destructure
 }: GameCardProps) => {
   const router = useRouter();
 
@@ -100,7 +103,6 @@ const GameCard = ({
   });
 
   const [activePlatform, setActivePlatform] = useState(uniquePlatforms[0]);
-  const [activeVariantIndex, setActiveVariantIndex] = useState(0);
 
   useEffect(() => {
     if (!uniquePlatforms.includes(activePlatform)) {
@@ -108,28 +110,17 @@ const GameCard = ({
     }
   }, [uniquePlatforms]);
 
-  useEffect(() => {
-    setActiveVariantIndex(0);
-  }, [activePlatform]);
-
   const currentStack = groupedVersions[activePlatform] || [];
-  const activeVer = currentStack[activeVariantIndex] || versions[0];
-
-  const cycleVariant = (e: any) => {
-    e.stopPropagation();
-    setActiveVariantIndex((prev) => (prev + 1) % currentStack.length);
-  };
+  const activeVer = currentStack[0] || versions[0];
 
   const [loadIcon, setLoadIcon] = useState(false);
   const glowAnim = useRef(new Animated.Value(0)).current;
 
-  // 🛑 FIX: Use ICON for the visual thumbnail to ensure it's square/safe.
-  // Use ART only for the navigation parameter.
   const displayImage = icon;
-  const heroArt = art || icon; // This goes to GameScreen header
+  const heroArt = art || icon;
 
-  const isSquareFormat = activeVer.platform === "PS5"; // PS5 icons are natively square
-  const imageResizeMode = isSquareFormat ? "cover" : "contain"; // "contain" prevents PS4 folder icons from cropping
+  const isSquareFormat = activeVer.platform === "PS5";
+  const imageResizeMode = isSquareFormat ? "cover" : "contain";
 
   const totalEarned =
     activeVer.counts.earnedBronze +
@@ -137,11 +128,11 @@ const GameCard = ({
     activeVer.counts.earnedGold +
     activeVer.counts.earnedPlatinum;
   const hasStarted = totalEarned > 0;
-  const currentVariant = currentStack[activeVariantIndex];
 
   useEffect(() => {
     setTimeout(() => setLoadIcon(true), 50);
   }, []);
+
   useEffect(() => {
     if (justUpdated) {
       Animated.sequence([
@@ -164,8 +155,8 @@ const GameCard = ({
         onPress={() =>
           router.push({
             pathname: "/game/[id]",
-            // Pass the nice 16:9 art to the details screen
-            params: { id: activeVer.id, artParam: heroArt },
+            // 🟢 PASS THE MODE TO THE DETAILS SCREEN
+            params: { id: activeVer.id, artParam: heroArt, contextMode: sourceMode },
           })
         }
       >
@@ -181,6 +172,7 @@ const GameCard = ({
               )}
             </View>
 
+            {/* Platform Badges */}
             <View style={styles.versionRow}>
               {uniquePlatforms.map((plat) => (
                 <TouchableOpacity
@@ -204,26 +196,6 @@ const GameCard = ({
                 </TouchableOpacity>
               ))}
             </View>
-
-            {currentStack.length > 1 && (
-              <TouchableOpacity style={styles.regionBadge} onPress={cycleVariant}>
-                <MaterialCommunityIcons
-                  name="earth"
-                  size={10}
-                  color="#ccc"
-                  style={{ marginRight: 2 }}
-                />
-                <Text style={styles.regionText}>
-                  {currentVariant.region || `Ver ${activeVariantIndex + 1}`}
-                </Text>
-                <MaterialCommunityIcons
-                  name="refresh"
-                  size={10}
-                  color="#4da3ff"
-                  style={{ marginLeft: 4 }}
-                />
-              </TouchableOpacity>
-            )}
           </View>
 
           <View style={[styles.infoColumn, { height: IMG_SIZE }]}>
@@ -322,20 +294,6 @@ const styles = StyleSheet.create({
   versionActive: { backgroundColor: "#4da3ff" },
   versionInactive: { backgroundColor: "transparent" },
   versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
-  regionBadge: {
-    position: "absolute",
-    top: 4,
-    left: 4,
-    backgroundColor: "rgba(0,0,0,0.85)",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  regionText: { color: "#ccc", fontSize: 9, fontWeight: "700" },
   infoColumn: {
     flex: 1,
     justifyContent: "space-between",

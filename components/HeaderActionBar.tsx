@@ -235,17 +235,11 @@ function HeaderActionBar({
               currentValue={ownershipMode}
               onSelect={onOwnershipChange}
             />
+
             <MenuOption<OwnershipMode>
-              label="Discover (Unowned)"
-              value="UNOWNED"
-              icon="globe-outline"
-              currentValue={ownershipMode}
-              onSelect={onOwnershipChange}
-            />
-            <MenuOption<OwnershipMode>
-              label="Global Search"
+              label="Discover"
               value="GLOBAL"
-              icon="infinite-outline"
+              icon="search-outline"
               currentValue={ownershipMode}
               onSelect={onOwnershipChange}
             />

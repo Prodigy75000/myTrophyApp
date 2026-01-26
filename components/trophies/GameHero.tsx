@@ -1,5 +1,5 @@
 // components/trophies/GameHero.tsx
-import { MaterialCommunityIcons } from "@expo/vector-icons"; // Added for icons
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -14,7 +14,7 @@ import {
 import ProgressCircle from "../ProgressCircle";
 
 const SCREEN_W = Dimensions.get("window").width;
-const ICON_SIZE = 100;
+const BASE_ICON_HEIGHT = 100;
 
 type HeroProps = {
   iconUrl: string;
@@ -36,6 +36,7 @@ type HeroProps = {
   displayArt?: string | null;
   versions?: { id: string; platform: string; region?: string }[];
   activeId?: string;
+  contextMode?: string;
 };
 
 export default function GameHero({
@@ -48,18 +49,37 @@ export default function GameHero({
   displayArt,
   versions = [],
   activeId,
+  contextMode,
 }: HeroProps) {
   const router = useRouter();
-  const [imageError, setImageError] = useState(false);
 
-  // -------------------------------------------------------------------------
-  // 1. SMART GROUPING (The Core Logic)
-  // -------------------------------------------------------------------------
+  // 1. ASPECT RATIO LOGIC
+  const [aspectRatio, setAspectRatio] = useState(1);
+
+  useEffect(() => {
+    if (iconUrl) {
+      Image.getSize(
+        iconUrl,
+        (width, height) => {
+          if (width && height) {
+            setAspectRatio(width / height);
+          }
+        },
+        (error) => console.log("Image size error:", error)
+      );
+    }
+  }, [iconUrl]);
+
+  const isLandscape = aspectRatio > 1.2;
+  const iconStyle = {
+    height: BASE_ICON_HEIGHT,
+    width: isLandscape ? BASE_ICON_HEIGHT * aspectRatio : BASE_ICON_HEIGHT,
+    maxWidth: 180,
+  };
+
+  // --- Smart Grouping & State ---
   const grouped = useMemo(() => {
-    // 🔴 OLD: const map: Record<string, { id: string; platform: string }[]> = {};
-    // 🟢 NEW: Add 'region?: string' to the type definition
     const map: Record<string, { id: string; platform: string; region?: string }[]> = {};
-
     versions.forEach((v) => {
       if (!map[v.platform]) map[v.platform] = [];
       map[v.platform].push(v);
@@ -73,13 +93,8 @@ export default function GameHero({
     return 0;
   });
 
-  // -------------------------------------------------------------------------
-  // 2. STATE INITIALIZATION (Sync with activeId)
-  // -------------------------------------------------------------------------
-  // Find which platform/variant corresponds to the incoming activeId
   const initialSetup = useMemo(() => {
     if (!activeId) return { plat: uniquePlatforms[0] || platform, idx: 0 };
-
     for (const plat of uniquePlatforms) {
       const idx = grouped[plat].findIndex((v) => v.id === activeId);
       if (idx !== -1) return { plat, idx };
@@ -90,51 +105,34 @@ export default function GameHero({
   const [activePlatform, setActivePlatform] = useState(initialSetup.plat);
   const [variantIndex, setVariantIndex] = useState(initialSetup.idx);
 
-  // Sync state if external activeId changes (rare, but good practice)
   useEffect(() => {
     setActivePlatform(initialSetup.plat);
     setVariantIndex(initialSetup.idx);
   }, [initialSetup]);
 
-  // -------------------------------------------------------------------------
-  // 3. INTERACTION HANDLERS
-  // -------------------------------------------------------------------------
-
-  // Switch Platform (Tier 1)
   const handlePlatformSwitch = (plat: string) => {
     if (plat === activePlatform) return;
-
-    // Switch UI immediately
     setActivePlatform(plat);
-    setVariantIndex(0); // Reset to first variant of new platform
-
-    // Navigate to the ID of the first variant
+    setVariantIndex(0);
     const newId = grouped[plat][0].id;
     router.replace({
       pathname: "/game/[id]",
-      params: { id: newId, artParam: displayArt },
+      params: { id: newId, artParam: displayArt, contextMode },
     });
   };
 
-  // Switch Variant (Tier 2) - Cycle through regions
   const handleVariantCycle = () => {
     const stack = grouped[activePlatform] || [];
     if (stack.length <= 1) return;
-
     const nextIndex = (variantIndex + 1) % stack.length;
     setVariantIndex(nextIndex);
-
-    // Navigate to the specific variant ID
     const newId = stack[nextIndex].id;
     router.replace({
       pathname: "/game/[id]",
-      params: { id: newId, artParam: displayArt },
+      params: { id: newId, artParam: displayArt, contextMode },
     });
   };
 
-  // -------------------------------------------------------------------------
-  // 4. RENDER HELPERS
-  // -------------------------------------------------------------------------
   const totalEarned =
     earnedTrophies.bronze +
     earnedTrophies.silver +
@@ -150,9 +148,12 @@ export default function GameHero({
   const currentStack = grouped[activePlatform] || [];
   const hasVariants = currentStack.length > 1;
 
+  // Region label logic
+  const currentRegion = currentStack[variantIndex]?.region || "Unknown Region";
+
   return (
     <View style={styles.container}>
-      {/* BACKGROUND ART */}
+      {/* ARTWORK BACKGROUND */}
       <View style={styles.artContainer}>
         <Image
           source={{ uri: displayArt || iconUrl }}
@@ -163,7 +164,7 @@ export default function GameHero({
         <LinearGradient colors={["transparent", "#000"]} style={styles.gradient} />
       </View>
 
-      {/* 🔽 TIER 1: PLATFORM BADGES (Top Left) 🔽 */}
+      {/* TOP LEFT: Platform Badges */}
       <View style={styles.topBadgesContainer}>
         <View style={styles.platformRow}>
           {uniquePlatforms.length > 0 ? (
@@ -187,70 +188,63 @@ export default function GameHero({
               </TouchableOpacity>
             ))
           ) : (
-            // Fallback if no versions array (rare)
             <View style={styles.platformBadgeFallback}>
               <Text style={styles.versionText}>{platform}</Text>
             </View>
           )}
         </View>
-
-        {/* 🔽 TIER 2: VARIANT SWITCHER 🔽 */}
-        {hasVariants && (
-          <TouchableOpacity
-            style={styles.variantSwitcher}
-            onPress={handleVariantCycle}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons name="earth" size={12} color="#ccc" />
-            <Text style={styles.variantText}>
-              {currentStack[variantIndex].region || `Variant ${variantIndex + 1}`}
-              {/* Small Counter (1/3) */}
-              <Text style={{ fontSize: 9, color: "#888", fontWeight: "400" }}>
-                {"  "}({variantIndex + 1}/{currentStack.length})
-              </Text>{" "}
-              {/* 👈 THIS WAS MISSING */}
-            </Text>
-            <MaterialCommunityIcons name="swap-horizontal" size={12} color="#4da3ff" />
-          </TouchableOpacity>
-        )}
       </View>
 
+      {/* 🟢 TOP RIGHT: Region Switcher (New Position & Design) */}
+      {hasVariants && (
+        <TouchableOpacity
+          style={styles.regionBtn}
+          onPress={handleVariantCycle}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="earth" size={14} color="#4da3ff" />
+          <Text style={styles.regionBtnText}>
+            {currentRegion}
+            <Text style={styles.regionCounterText}>
+              {" "}
+              ({variantIndex + 1}/{currentStack.length})
+            </Text>
+          </Text>
+          <MaterialCommunityIcons name="chevron-down" size={16} color="#aaa" />
+        </TouchableOpacity>
+      )}
+
+      {/* MAIN CONTENT */}
       <View style={styles.content}>
-        {/* ROW: Icon + Info */}
         <View style={styles.headerRow}>
-          {/* ICON (Clean) */}
-          <View style={styles.iconWrapper}>
-            <Image
-              source={{ uri: iconUrl }}
-              style={styles.icon}
-              resizeMode="contain"
-              onError={() => setImageError(true)}
-            />
+          {/* ICON */}
+          <View
+            style={[
+              styles.iconWrapperBase,
+              { width: iconStyle.width, height: iconStyle.height },
+            ]}
+          >
+            <Image source={{ uri: iconUrl }} style={styles.icon} resizeMode="cover" />
           </View>
 
-          {/* TITLE & PROGRESS */}
-          <View style={styles.infoWrapper}>
+          {/* TITLE & STATS */}
+          <View style={styles.rightColumn}>
             <Text style={styles.title} numberOfLines={2}>
               {title}
             </Text>
-            <View style={styles.statsRow}>
+
+            <View style={styles.metaRow}>
               <View style={styles.trophyCount}>
-                <Text style={styles.trophyLabel}>Trophies</Text>
+                <Text style={styles.trophyLabel}>Trophies Earned</Text>
                 <Text style={styles.trophyValue}>
                   {totalEarned} <Text style={styles.totalText}>/ {totalDefined}</Text>
                 </Text>
               </View>
-              <View style={styles.divider} />
-              <View style={styles.trophyCount}>
-                <Text style={styles.trophyLabel}>Progress</Text>
-                <Text style={styles.trophyValue}>{progress}%</Text>
+
+              <View style={styles.circleWrapper}>
+                <ProgressCircle progress={progress} size={46} strokeWidth={4} />
               </View>
             </View>
-          </View>
-
-          {/* CIRCLE */}
-          <View style={styles.circleWrapper}>
-            <ProgressCircle progress={progress} size={50} strokeWidth={4} />
           </View>
         </View>
       </View>
@@ -272,29 +266,18 @@ const styles = StyleSheet.create({
     zIndex: 0,
     opacity: 0.6,
   },
-  artImage: {
-    width: "100%",
-    height: "100%",
-  },
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  artImage: { width: "100%", height: "100%" },
+  gradient: { ...StyleSheet.absoluteFillObject },
 
-  // --- TOP LEFT BADGES ---
+  // --- Top Left ---
   topBadgesContainer: {
     position: "absolute",
     top: 10,
     left: 16,
     zIndex: 10,
-    alignItems: "flex-start", // Align left
-    gap: 6, // Space between Platform Row and Variant Row
+    alignItems: "flex-start",
   },
-  platformRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  // Platform Badge Styles
+  platformRow: { flexDirection: "row", gap: 8 },
   versionBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -302,18 +285,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
-  versionActive: {
-    backgroundColor: "#4da3ff", // Bright Blue for Active
-    borderColor: "#4da3ff",
-  },
-  versionInactive: {
-    backgroundColor: "rgba(0,0,0,0.6)", // Darker for inactive
-  },
-  versionText: {
-    fontSize: 11,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-  },
+  versionActive: { backgroundColor: "#4da3ff", borderColor: "#4da3ff" },
+  versionInactive: { backgroundColor: "rgba(0,0,0,0.6)" },
+  versionText: { fontSize: 11, fontWeight: "bold", textTransform: "uppercase" },
   platformBadgeFallback: {
     backgroundColor: "#222",
     paddingHorizontal: 8,
@@ -323,36 +297,51 @@ const styles = StyleSheet.create({
     borderColor: "#444",
   },
 
-  // Variant Switcher (Tier 2)
-  variantSwitcher: {
+  // --- 🟢 Top Right Region Button ---
+  regionBtn: {
+    position: "absolute",
+    top: 10,
+    right: 16,
+    zIndex: 20,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.8)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.75)", // Glassy dark background
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
     gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  variantText: {
-    color: "#ddd",
-    fontSize: 10,
+  regionBtnText: {
+    color: "#fff",
+    fontSize: 12,
     fontWeight: "600",
   },
-
-  // --- CONTENT ---
-  content: {
-    marginTop: 120,
-    paddingHorizontal: 16,
+  regionCounterText: {
+    color: "#888",
+    fontSize: 10,
+    fontWeight: "400",
   },
+
+  // --- Content ---
+  content: { marginTop: 120, paddingHorizontal: 16 },
   headerRow: {
     flexDirection: "row",
     alignItems: "flex-end",
   },
-  iconWrapper: {
-    width: ICON_SIZE,
-    height: ICON_SIZE,
+  rightColumn: {
+    flex: 1,
+    justifyContent: "flex-end",
+    minHeight: BASE_ICON_HEIGHT,
+    paddingBottom: 4,
+  },
+  iconWrapperBase: {
     borderRadius: 12,
     borderWidth: 2,
     borderColor: "#333",
@@ -360,14 +349,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginRight: 16,
   },
-  icon: {
-    width: "100%",
-    height: "100%",
-  },
-  infoWrapper: {
-    flex: 1,
-    paddingBottom: 4,
-  },
+  icon: { width: "100%", height: "100%" },
   title: {
     color: "white",
     fontSize: 18,
@@ -377,36 +359,20 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  statsRow: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
   },
-  trophyCount: {
-    marginRight: 12,
-  },
+  trophyCount: {},
   trophyLabel: {
     color: "#aaa",
     fontSize: 10,
     textTransform: "uppercase",
     marginBottom: 2,
   },
-  trophyValue: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  totalText: {
-    color: "#666",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  divider: {
-    width: 1,
-    height: 24,
-    backgroundColor: "#444",
-    marginRight: 12,
-  },
-  circleWrapper: {
-    paddingBottom: 4,
-  },
+  trophyValue: { color: "white", fontSize: 16, fontWeight: "800" },
+  totalText: { color: "#666", fontSize: 12, fontWeight: "600" },
+  circleWrapper: {},
 });

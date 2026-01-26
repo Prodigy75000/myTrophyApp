@@ -12,10 +12,11 @@ import {
   View,
 } from "react-native";
 import {
+  Gesture,
+  GestureDetector,
   GestureHandlerRootView,
-  PinchGestureHandler,
-  State,
 } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Contexts & Config
@@ -59,7 +60,7 @@ export default function HomeScreen() {
   // View Options
   const [sortMode, setSortMode] = useState<SortMode>("LAST_PLAYED");
   const [sortDirection, setSortDirection] = useState<SortDirection>("DESC");
-  const [viewMode, setViewMode] = useState<ViewMode>("LIST");
+  const [viewMode, setViewMode] = useState<ViewMode>("GRID");
   const [filterMode, setFilterMode] = useState<FilterMode>("ALL");
   const [gridColumns, setGridColumns] = useState(3);
 
@@ -174,23 +175,27 @@ export default function HomeScreen() {
     });
   };
 
-  const onPinchStateChange = (event: any) => {
-    if (event.nativeEvent.state === State.END) {
-      const scale = event.nativeEvent.scale;
-      let newCols = gridColumns;
-      if (scale > 1.2)
-        newCols = Math.max(2, gridColumns - 1); // Zoom In
-      else if (scale < 0.8) newCols = Math.min(4, gridColumns + 1); // Zoom Out
+  const applyPinchScale = (scale: number) => {
+    let newCols = gridColumns;
 
-      if (newCols !== gridColumns) {
-        setGridColumns(newCols);
-        AsyncStorage.setItem(STORAGE_KEY_GRID, String(newCols));
-        showToast(
-          `Grid: ${newCols === 2 ? "Large" : newCols === 3 ? "Medium" : "Small"}`
-        );
-      }
+    const MIN_COLS = 1;
+    const MAX_COLS = 4;
+
+    if (scale > 1.2)
+      newCols = Math.max(MIN_COLS, gridColumns - 1); // Zoom in -> bigger
+    else if (scale < 0.8) newCols = Math.min(MAX_COLS, gridColumns + 1); // Zoom out -> smaller
+
+    if (newCols !== gridColumns) {
+      setGridColumns(newCols);
+      AsyncStorage.setItem(STORAGE_KEY_GRID, String(newCols));
+      showToast(`Grid: ${newCols === 2 ? "Large" : newCols === 3 ? "Medium" : "Small"}`);
     }
   };
+  const pinchGesture = Gesture.Pinch()
+    .enabled(viewMode === "GRID")
+    .onEnd((e) => {
+      runOnJS(applyPinchScale)(e.scale);
+    });
 
   // Header Animation
   const totalHeaderHeight = BASE_HEADER_HEIGHT + insets.top;
@@ -225,6 +230,7 @@ export default function HomeScreen() {
           onTogglePeek={() =>
             setActivePeekId((prev) => (prev === item.id ? null : item.id))
           }
+          sourceMode={ownershipMode}
         />
       );
     }
@@ -238,6 +244,7 @@ export default function HomeScreen() {
         versions={item.versions} // 👈 Passing the full stack
         isPinned={isPinned}
         onPin={(id) => togglePin(id)}
+        sourceMode={ownershipMode}
       />
     );
   };
@@ -282,10 +289,7 @@ export default function HomeScreen() {
 
       {/* CONTENT */}
       {trophies?.trophyTitles ? (
-        <PinchGestureHandler
-          enabled={viewMode === "GRID"}
-          onHandlerStateChange={onPinchStateChange}
-        >
+        <GestureDetector gesture={pinchGesture}>
           <Animated.FlatList
             ref={flatListRef}
             key={viewMode === "GRID" ? `grid-${gridColumns}` : "list"}
@@ -324,7 +328,7 @@ export default function HomeScreen() {
               ) : null
             }
           />
-        </PinchGestureHandler>
+        </GestureDetector>
       ) : (
         <Text style={{ color: "red", marginTop: 100, textAlign: "center" }}>
           ⚠️ No trophy data available.

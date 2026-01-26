@@ -5,7 +5,7 @@ import { Image, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Components & Utils
-import { TrophyType } from "../../utils/normalizeTrophy"; // Ensure you have this exported in utils
+import { TrophyType } from "../../utils/normalizeTrophy";
 import SmartGuideModal from "./SmartGuideModal";
 
 // ---------------------------------------------------------------------------
@@ -17,8 +17,9 @@ type ActionSheetProps = {
   onClose: () => void;
   gameName: string;
   trophyName: string;
-  trophyType: TrophyType; // Uses strict type "bronze" | "silver" etc.
+  trophyType: TrophyType;
   trophyIconUrl?: string;
+  trophyDetail?: string;
 };
 
 const TROPHY_ICONS: Record<string, any> = {
@@ -28,39 +29,36 @@ const TROPHY_ICONS: Record<string, any> = {
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
 
+const RANK_COLORS: Record<string, string> = {
+  bronze: "#cd7f32",
+  silver: "#c0c0c0",
+  gold: "#ffd700",
+  platinum: "#e5e4e2",
+};
+
 // ---------------------------------------------------------------------------
-// SUB-COMPONENT: Action Row
+// SUB-COMPONENT: Action Button
 // ---------------------------------------------------------------------------
 
-type ActionRowProps = {
+type ActionButtonProps = {
   iconName: keyof typeof Ionicons.glyphMap;
-  iconColor: string;
-  iconBg: string;
-  title: string;
-  subtitle?: string;
+  color: string;
+  label: string;
   onPress: () => void;
 };
 
-const ActionRow = ({
-  iconName,
-  iconColor,
-  iconBg,
-  title,
-  subtitle,
-  onPress,
-}: ActionRowProps) => (
+const ActionButton = ({ iconName, color, label, onPress }: ActionButtonProps) => (
   <Pressable
     onPress={onPress}
-    style={({ pressed }) => [styles.actionRow, pressed && styles.actionPressed]}
+    style={({ pressed }) => [
+      styles.actionBtn,
+      { backgroundColor: pressed ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)" },
+    ]}
   >
-    <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
-      <Ionicons name={iconName} size={20} color={iconColor} />
+    <View style={[styles.actionIconCircle, { backgroundColor: `${color}20` }]}>
+      <Ionicons name={iconName} size={24} color={color} />
     </View>
-    <View style={styles.textColumn}>
-      <Text style={[styles.actionText, !subtitle && { color: "#aaa" }]}>{title}</Text>
-      {subtitle && <Text style={styles.subText}>{subtitle}</Text>}
-    </View>
-    <Ionicons name="chevron-forward" size={16} color={subtitle ? "#666" : "#444"} />
+    <Text style={styles.actionLabel}>{label}</Text>
   </Pressable>
 );
 
@@ -75,6 +73,7 @@ function TrophyActionSheet({
   trophyName,
   trophyType,
   trophyIconUrl,
+  trophyDetail,
 }: ActionSheetProps) {
   const insets = useSafeAreaInsets();
   const [activeGuide, setActiveGuide] = useState<{
@@ -82,31 +81,26 @@ function TrophyActionSheet({
   } | null>(null);
 
   // --- Handlers ---
-
-  const handleWatchGuide = () => {
-    setActiveGuide({ mode: "VIDEO" });
-    // Note: We don't close the modal yet, the SmartGuideModal sits on top
-    // Alternatively, you can close this one if SmartGuideModal is a separate screen
-  };
-
-  const handleReadGuide = () => {
-    setActiveGuide({ mode: "GUIDE" });
-  };
+  const handleWatchGuide = () => setActiveGuide({ mode: "VIDEO" });
+  const handleReadGuide = () => setActiveGuide({ mode: "GUIDE" });
 
   const handleGoogleSearch = () => {
-    const query = encodeURIComponent(`${gameName} ${trophyName} trophy`);
+    const query = encodeURIComponent(`${gameName} ${trophyName} trophy guide`);
     Linking.openURL(`https://www.google.com/search?q=${query}`);
     onClose();
   };
 
-  const closeAll = () => {
-    setActiveGuide(null);
-    onClose();
-  };
+  // 1. Large Art (Left Side): Use specific art if available, otherwise rank icon
+  const displayArt = trophyIconUrl
+    ? { uri: trophyIconUrl }
+    : TROPHY_ICONS[trophyType] || TROPHY_ICONS.bronze;
+
+  // 2. Small Icon (Title Row): Always show the rank icon (Bronze/Silver/...)
+  const rankIcon = TROPHY_ICONS[trophyType] || TROPHY_ICONS.bronze;
+  const rankColor = RANK_COLORS[trophyType] || "#ffffff";
 
   return (
     <>
-      {/* 1. Guide Modal (Pops up over this sheet if active) */}
       <SmartGuideModal
         visible={!!activeGuide}
         onClose={() => setActiveGuide(null)}
@@ -115,59 +109,72 @@ function TrophyActionSheet({
         mode={activeGuide?.mode ?? null}
       />
 
-      {/* 2. Action Sheet Modal */}
       <Modal
         transparent
         animationType="fade"
         visible={visible}
         onRequestClose={onClose}
-        statusBarTranslucent={true}
+        statusBarTranslucent
       >
         <View style={styles.overlay}>
-          {/* Backdrop tap to close */}
           <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
 
-          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 10 }]}>
+          <View style={[styles.sheetContainer, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.dragHandle} />
+
             {/* HEADER */}
-            <View style={styles.header}>
-              <Image
-                source={TROPHY_ICONS[trophyType] || TROPHY_ICONS.bronze}
-                resizeMode="contain"
-                style={styles.icon}
-              />
-              <Text style={styles.title} numberOfLines={2}>
-                {trophyName}
-              </Text>
+            <View style={styles.headerRow}>
+              {/* Left: Large Square Art */}
+              <View style={[styles.largeIconContainer, { borderColor: rankColor }]}>
+                <Image source={displayArt} style={styles.largeIcon} resizeMode="cover" />
+              </View>
+
+              {/* Right: Info Column */}
+              <View style={styles.headerTextCol}>
+                {/* 🟢 Title Row: Rarity Icon + Trophy Name */}
+                <View style={styles.titleRow}>
+                  <Image
+                    source={rankIcon}
+                    style={styles.rarityIcon}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.trophyTitle} numberOfLines={2}>
+                    {trophyName}
+                  </Text>
+                </View>
+
+                <Text style={styles.gameTitle} numberOfLines={1}>
+                  {gameName}
+                </Text>
+                {trophyDetail ? (
+                  <Text style={styles.trophyDesc} numberOfLines={2}>
+                    {trophyDetail}
+                  </Text>
+                ) : null}
+              </View>
             </View>
 
-            <View style={styles.divider} />
-
             {/* ACTIONS */}
-            <ActionRow
-              iconName="logo-youtube"
-              iconColor="#FF0000"
-              iconBg="rgba(255, 0, 0, 0.15)"
-              title="Watch Video Guide"
-              subtitle="Find best tutorial on YouTube"
-              onPress={handleWatchGuide}
-            />
-
-            <ActionRow
-              iconName="book"
-              iconColor="#4da3ff"
-              iconBg="rgba(77, 163, 255, 0.15)"
-              title="Read Guide"
-              subtitle="PSNProfiles • TrueAchievements"
-              onPress={handleReadGuide}
-            />
-
-            <ActionRow
-              iconName="logo-google"
-              iconColor="#aaa"
-              iconBg="#222"
-              title="Google Search"
-              onPress={handleGoogleSearch}
-            />
+            <View style={styles.actionsGrid}>
+              <ActionButton
+                iconName="logo-youtube"
+                color="#ff4444"
+                label="Video"
+                onPress={handleWatchGuide}
+              />
+              <ActionButton
+                iconName="book"
+                color="#4da3ff"
+                label="Guide"
+                onPress={handleReadGuide}
+              />
+              <ActionButton
+                iconName="search"
+                color="#aaaaaa"
+                label="Google"
+                onPress={handleGoogleSearch}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -184,80 +191,105 @@ export default memo(TrophyActionSheet);
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
     justifyContent: "flex-end",
   },
   sheetContainer: {
-    marginHorizontal: 16,
-    marginBottom: 16,
     backgroundColor: "#151b2b",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#2a3449",
-    paddingTop: 8,
-    paddingHorizontal: 8,
-    // Shadows
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 10,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
   },
-  header: {
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    marginBottom: 24,
+  },
+  largeIconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    marginRight: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  largeIcon: {
+    width: "100%",
+    height: "100%",
+  },
+  headerTextCol: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 4,
   },
-  icon: {
+  rarityIcon: {
     width: 28,
     height: 28,
-    marginRight: 12,
+    marginRight: 6,
   },
-  title: {
+  trophyTitle: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    flex: 1, // Ensure text wraps correctly next to icon
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#2a3449",
-    marginBottom: 8,
-    marginHorizontal: 12,
-  },
-  // Action Row Styles
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  actionPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  textColumn: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  actionText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  subText: {
+  gameTitle: {
     color: "#888",
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  trophyDesc: {
+    color: "#aaa",
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
+  actionsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  actionIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  actionLabel: {
+    color: "#ddd",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

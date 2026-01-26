@@ -33,6 +33,8 @@ type Props = {
   onPin?: (id: string) => void;
   isPeeking?: boolean;
   onTogglePeek?: () => void;
+  // 🟢 NEW PROP
+  sourceMode?: "OWNED" | "GLOBAL" | "UNOWNED";
 };
 
 const GameGridItem = ({
@@ -46,6 +48,7 @@ const GameGridItem = ({
   onPin,
   isPeeking = false,
   onTogglePeek,
+  sourceMode, // 🟢 Destructure
 }: Props) => {
   const router = useRouter();
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -83,10 +86,6 @@ const GameGridItem = ({
   const size = screenWidth / numColumns;
 
   const isPS5 = activeVer?.platform === "PS5";
-
-  // 🟢 FORCE CONTAIN:
-  // Since we are now using "MASTER" (16:9) images for the grid tiles,
-  // we MUST use 'contain' to show the full image. 'cover' would zoom/crop it.
   const dynamicResizeMode = "contain";
 
   useEffect(() => {
@@ -110,7 +109,8 @@ const GameGridItem = ({
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       router.push({
         pathname: "/game/[id]",
-        params: { id: activeVer.id, artParam: heroArt || icon },
+        // 🟢 PASS THE MODE
+        params: { id: activeVer.id, artParam: heroArt || icon, contextMode: sourceMode },
       });
       lastTapRef.current = 0;
     } else {
@@ -140,7 +140,6 @@ const GameGridItem = ({
             borderColor: borderColor,
           }}
         >
-          {/* 🟢 DISPLAY: Always show the Icon (Now 16:9 MASTER art, contained) */}
           <Image
             source={{ uri: icon }}
             style={{ width: "100%", height: "100%" }}
@@ -200,7 +199,7 @@ const GameGridItem = ({
                   >
                     <Text
                       style={[
-                        styles.badgeText,
+                        styles.versionText,
                         isActive ? { color: "white" } : { color: "#888" },
                       ]}
                     >
@@ -270,13 +269,16 @@ const styles = StyleSheet.create({
     bottom: 4,
     left: 4,
     flexDirection: "row",
+    backgroundColor: "rgba(0,0,0,0.85)",
+    borderRadius: 4,
+    padding: 2,
     gap: 2,
     zIndex: 10,
   },
-  versionBadge: { paddingHorizontal: 4, paddingVertical: 2, borderRadius: 2 },
+  versionBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   versionActive: { backgroundColor: "#4da3ff" },
-  versionInactive: { backgroundColor: "rgba(0,0,0,0.85)" },
-  badgeText: { fontSize: 8, fontWeight: "bold", textTransform: "uppercase" },
+  versionInactive: { backgroundColor: "transparent" },
+  versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
   progressContainer: {
     position: "absolute",
     bottom: 4,

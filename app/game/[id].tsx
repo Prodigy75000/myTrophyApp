@@ -13,18 +13,24 @@ import TrophyListHeader, {
   TrophySortMode,
 } from "../../components/trophies/TrophyListHeader";
 import { useGameDetails } from "../../hooks/useGameDetails";
+import { useTrophy } from "../../providers/TrophyContext";
 import { normalizeTrophyType } from "../../utils/normalizeTrophy";
 
-// ⚠️ IMPORT MASTER DATA (Essential for Sibling/Region Lookup)
+// ⚠️ IMPORT MASTER DATA
 import masterGamesRaw from "../../data/master_games.json";
 
 const HEADER_HEIGHT = 60;
 
 export default function GameScreen() {
-  const { id: rawId, artParam } = useLocalSearchParams();
+  // 🟢 Destructure contextMode
+  const { id: rawId, artParam, contextMode } = useLocalSearchParams();
   const gameId = Array.isArray(rawId) ? rawId[0] : rawId;
+  const contextModeStr = Array.isArray(contextMode) ? contextMode[0] : contextMode;
+
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+
+  const { trophies } = useTrophy();
 
   // --- UI STATE ---
   const [searchText, setSearchText] = useState("");
@@ -53,14 +59,14 @@ export default function GameScreen() {
       g.linkedVersions?.some((v: any) => v.npCommunicationId === gameId)
     );
 
-    let rawList = [];
+    let rawList: any[] = [];
 
     if (entry && entry.linkedVersions) {
-      // 2. Map Data (INCLUDING REGION!)
+      // 2. Map Data
       rawList = entry.linkedVersions.map((v: any) => ({
         id: v.npCommunicationId,
         platform: v.platform,
-        region: v.region, // 👈 THIS IS THE MISSING LINK
+        region: v.region,
       }));
     } else {
       // Fallback
@@ -72,14 +78,28 @@ export default function GameScreen() {
       ];
     }
 
-    // 3. Deduplicate (Just in case)
+    // 3. Deduplicate
     const uniqueMap = new Map();
     rawList.forEach((v: any) => {
       if (!uniqueMap.has(v.id)) uniqueMap.set(v.id, v);
     });
+    const uniqueList = Array.from(uniqueMap.values());
 
-    return Array.from(uniqueMap.values());
-  }, [gameId, game]);
+    // 🟢 4. FILTER LOGIC
+    const isDiscoverMode = contextModeStr === "GLOBAL";
+
+    if (!isDiscoverMode && trophies?.trophyTitles) {
+      // Library mode: Filter to only show siblings the user actually owns.
+      return uniqueList.filter((v: any) => {
+        return trophies.trophyTitles.some(
+          (owned: any) => String(owned.npCommunicationId) === String(v.id)
+        );
+      });
+    }
+
+    // Otherwise (Discover mode), return everything.
+    return uniqueList;
+  }, [gameId, game, trophies, contextModeStr]);
 
   // --- ANIMATION ---
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -159,9 +179,10 @@ export default function GameScreen() {
           earnedTrophies={game.earnedTrophies}
           definedTrophies={game.definedTrophies}
           displayArt={typeof artParam === "string" ? artParam : null}
-          // 🔽 PASSING THE VERSIONS (Now with regions!)
           versions={versions}
           activeId={gameId}
+          // 🟢 PASS IT DOWN
+          contextMode={contextModeStr}
         />
 
         {isInitialLoading && (

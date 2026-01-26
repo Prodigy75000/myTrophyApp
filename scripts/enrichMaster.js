@@ -5,8 +5,7 @@ const dotenv = require("dotenv");
 const {
   exchangeNpssoForCode,
   exchangeCodeForAccessToken,
-  getTitleTrophies, // <-- Public Data (No Rarity)
-  getUserTrophiesEarnedForTitle, // <-- User Data (Has Rarity)
+  getTitleTrophies,
 } = require("psn-api");
 
 dotenv.config();
@@ -15,174 +14,153 @@ dotenv.config();
 // CONFIGURATION
 // ---------------------------------------------------------------------------
 
+// 🟢 FIX: Use __dirname to safely resolve paths from any folder
 const INPUT_FILE = path.join(process.cwd(), "data", "master_games.json");
-const OUTPUT_FILE = path.join(process.cwd(), "data", "master_enriched.json");
-const SHOVELWARE_FILE = path.join(process.cwd(), "data", "shovelware_dump.json");
 
-// Rate Limit: 1.5s is safe for mixed calls
+const OUTPUT_FILE = path.join(process.cwd(), "data", "master_enriched.json");
+
+// 🟢 STRATEGY: We write shovelware to a totally separate file immediately
+
+const SHOVELWARE_FILE = path.join(process.cwd(), "data", "master_shovelware.json");
+
 const DELAY_MS = 1500;
 
-// ---------------------------------------------------------------------------
-// HELPERS
-// ---------------------------------------------------------------------------
+// Helper: Prioritize modern platforms, but fallback to legacy
+function getPrimeVersion(versions) {
+  if (!versions || versions.length === 0) return null;
+  const priority = ["PS5", "PS4", "PS3", "PSVITA", "PSP"];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  for (const plat of priority) {
+    const found = versions.find((v) => v.platform === plat && v.npCommunicationId);
+    if (found) return found;
+  }
+  return versions[0];
+}
 
 async function authenticate() {
   console.log("🔑 Authenticating with PSN...");
   const npsso = process.env.PSN_NPSSO;
   if (!npsso) throw new Error("Missing PSN_NPSSO in .env");
-
   const code = await exchangeNpssoForCode(npsso);
-  const token = await exchangeCodeForAccessToken(code);
-  return token;
+  return await exchangeCodeForAccessToken(code);
 }
 
-// ---------------------------------------------------------------------------
-// MAIN LOGIC
-// ---------------------------------------------------------------------------
-
 async function runEnrichment() {
-  if (!fs.existsSync(INPUT_FILE)) {
-    console.error(`❌ Input file not found: ${INPUT_FILE}`);
-    return;
-  }
+  if (!fs.existsSync(INPUT_FILE))
+    return console.error("❌ No Input File found at:", INPUT_FILE);
 
   const allGames = JSON.parse(fs.readFileSync(INPUT_FILE, "utf-8"));
-  console.log(`📚 Loaded ${allGames.length} canonical games.`);
 
-  // Resume capability
+  // Load existing progress
   let enrichedMap = new Map();
   if (fs.existsSync(OUTPUT_FILE)) {
     try {
       const existing = JSON.parse(fs.readFileSync(OUTPUT_FILE));
       existing.forEach((g) => enrichedMap.set(g.canonicalId, g));
-      console.log(`🔄 Resuming... ${enrichedMap.size} games already enriched.`);
-    } catch (e) {
-      console.warn("⚠️ Output file corrupted or empty. Starting fresh.");
-    }
+    } catch (e) {}
   }
 
-  const shovelwareList = [];
-  const token = await authenticate();
+  // Load existing shovelware
+  let shovelwareList = [];
+  if (fs.existsSync(SHOVELWARE_FILE)) {
+    try {
+      shovelwareList = JSON.parse(fs.readFileSync(SHOVELWARE_FILE));
+    } catch (e) {}
+  }
 
+  let token = await authenticate();
+  let tokenTime = Date.now();
   let processedCount = 0;
-  let skippedCount = 0;
+
+  console.log(`🚀 Starting enrichment for ${allGames.length} games...`);
 
   for (const game of allGames) {
     const cid = game.canonicalId;
 
-    // Filter 1: Shovelware
+    // 1. Shovelware Check
     if (game.tags && game.tags.includes("shovelware")) {
-      shovelwareList.push(game);
-      continue;
-    }
-
-    // Filter 2: Already Done
-    if (enrichedMap.has(cid)) {
-      continue;
-    }
-
-    // Filter 3: PS5 Only (for now)
-    const primeVersion = game.linkedVersions.find((v) => v.platform === "PS5");
-    if (!primeVersion) {
-      skippedCount++;
-      continue;
-    }
-
-    // --- THE HYBRID FETCH ---
-    try {
-      let trophySet;
-      let hasRarity = false;
-
-      try {
-        // STRATEGY A: Try to get User Data (With Rarity)
-        // This only works if YOU own/played the game.
-        trophySet = await getUserTrophiesEarnedForTitle(
-          token,
-          "me",
-          primeVersion.npCommunicationId,
-          "all",
-          { npServiceName: "trophy2" }
-        );
-        hasRarity = true;
-        console.log(
-          `💎 Fetched (Owned): [${primeVersion.npCommunicationId}] ${game.displayName}`
-        );
-      } catch (userError) {
-        // STRATEGY B: Fallback to Public Data (No Rarity)
-        // This works for ANY game.
-        if (
-          userError.message.includes("Resource not found") ||
-          userError.response?.status === 404
-        ) {
-          trophySet = await getTitleTrophies(
-            token,
-            primeVersion.npCommunicationId,
-            "all",
-            { npServiceName: "trophy2" }
-          );
-          console.log(
-            `📦 Fetched (Public): [${primeVersion.npCommunicationId}] ${game.displayName}`
-          );
-        } else {
-          // If it's a real error (like 429 Too Many Requests), re-throw it
-          throw userError;
-        }
+      if (!shovelwareList.some((s) => s.canonicalId === cid)) {
+        shovelwareList.push(game);
       }
+      continue;
+    }
 
-      // --- BUILD OBJECT ---
+    // 2. Already Done Check
+    if (enrichedMap.has(cid)) continue;
+
+    // 3. Token Refresh Check (Every 50 mins)
+    if (Date.now() - tokenTime > 1000 * 60 * 50) {
+      console.log("⏳ Token expiring... refreshing...");
+      token = await authenticate();
+      tokenTime = Date.now();
+    }
+
+    // 4. Select Best Version
+    const primeVersion = getPrimeVersion(game.linkedVersions);
+
+    if (!primeVersion) {
+      console.warn(`⚠️ No valid versions for ${game.displayName}`);
+      continue;
+    }
+
+    // 🟢 FIX: Determine correct service ('trophy' for legacy, 'trophy2' for modern)
+    const isLegacy = ["PS3", "PSVITA", "PSP"].includes(primeVersion.platform);
+    const serviceName = isLegacy ? "trophy" : "trophy2";
+
+    try {
+      const trophySet = await getTitleTrophies(
+        token,
+        primeVersion.npCommunicationId,
+        "all",
+        { npServiceName: serviceName }
+      );
+
+      // 🟢 FIX: Safety check (trophySet.trophies || []) prevents the map error
+      const safeTrophies = trophySet.trophies || [];
+
       const enrichedGame = {
         ...game,
         iconUrl: trophySet.trophyTitleIconUrl || game.art?.square,
-
-        trophies: trophySet.trophies.map((t) => ({
+        trophies: safeTrophies.map((t) => ({
           id: t.trophyId,
           name: t.trophyName,
           detail: t.trophyDetail,
           iconUrl: t.trophyIconUrl,
           type: t.trophyType,
-          hidden: t.trophyHidden,
+          hidden: t.hiddenFlag || t.trophyHidden, // Handle varying API field names
           groupId: t.trophyGroupId,
-          // If hasRarity is true, use the value. Otherwise null.
-          earnedRate: hasRarity ? t.trophyEarnedRate : null,
         })),
-
         enrichedAt: new Date().toISOString(),
       };
 
       enrichedMap.set(cid, enrichedGame);
       processedCount++;
+      console.log(
+        `✅ [${processedCount}] Enriched (${primeVersion.platform}): ${game.displayName}`
+      );
 
-      // Save every 10 games
       if (processedCount % 10 === 0) {
-        saveProgress(enrichedMap, shovelwareList);
+        saveFiles(enrichedMap, shovelwareList);
       }
 
-      await sleep(DELAY_MS);
+      await new Promise((r) => setTimeout(r, DELAY_MS));
     } catch (e) {
       console.error(
-        `❌ FAILED [${primeVersion.npCommunicationId}] ${game.displayName}:`,
-        e.message
+        `❌ FAILED ${game.displayName} [${primeVersion.platform}]: ${e.message}`
       );
     }
   }
 
-  // Final Save
-  saveProgress(enrichedMap, shovelwareList);
-  console.log("\n✅ Enrichment Complete!");
-  console.log(`   ✨ Enriched: ${processedCount}`);
-  console.log(`   ⏭️ Skipped: ${skippedCount}`);
+  saveFiles(enrichedMap, shovelwareList);
+  console.log("🎉 DONE!");
 }
 
-function saveProgress(map, shovelList) {
+function saveFiles(map, shovelList) {
   const sorted = Array.from(map.values()).sort((a, b) =>
     a.displayName.localeCompare(b.displayName)
   );
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(sorted, null, 2));
-  if (shovelList.length > 0) {
-    fs.writeFileSync(SHOVELWARE_FILE, JSON.stringify(shovelList, null, 2));
-  }
+  fs.writeFileSync(SHOVELWARE_FILE, JSON.stringify(shovelList, null, 2));
 }
 
 runEnrichment();

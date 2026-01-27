@@ -30,7 +30,6 @@
   "files.exclude": {
     "**/node_modules": true,
     "**/.expo": true,
-    "**/android": true,
     "**/ios": true,
     "**/expo-env.d.ts": true,
     "**/package-lock.json": true,

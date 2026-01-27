@@ -1,4 +1,5 @@
 // providers/TrophyContext.tsx
+import AsyncStorage from "@react-native-async-storage/async-storage"; // 🟢 Import Storage
 import React, {
   createContext,
   useCallback,
@@ -10,6 +11,10 @@ import React, {
 import { PROXY_BASE_URL } from "../config/endpoints";
 import { useTrophyWatchdog } from "../hooks/useTrophyWatchdog";
 
+// 🟢 STORAGE KEYS
+const KEY_ACCESS_TOKEN = "user_access_token";
+const KEY_ACCOUNT_ID = "user_account_id";
+
 // ---------------------------------------------------------------------------
 // TYPES
 // ---------------------------------------------------------------------------
@@ -20,7 +25,7 @@ export type UserProfile = {
   trophyLevel?: number | null;
   progress?: number | null;
 } | null;
-[];
+
 type TrophyData = {
   trophyTitles: {
     npCommunicationId: string;
@@ -28,12 +33,12 @@ type TrophyData = {
     earnedTrophies: { bronze: number; silver: number; gold: number; platinum: number };
     [key: string]: any;
   }[];
-  [key: string]: any; // FIX: Added "any"
+  [key: string]: any;
 };
 
 type TrophyContextType = {
   trophies: TrophyData | null;
-  setTrophies: (data: any) => void; // FIX: Fixed typo "s[]tTrophies"
+  setTrophies: (data: any) => void;
   refreshAllTrophies: () => Promise<void>;
   refreshSingleGame: (npwr: string) => Promise<void>;
   accountId: string | null;
@@ -42,6 +47,7 @@ type TrophyContextType = {
   setAccessToken: (token: string | null) => void;
   user: UserProfile;
   setUser: (u: UserProfile) => void;
+  logout: () => Promise<void>; // 🟢 Added Logout
 };
 
 // ---------------------------------------------------------------------------
@@ -52,12 +58,56 @@ const TrophyContext = createContext<TrophyContextType | null>(null);
 
 export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   const [trophies, setTrophies] = useState<TrophyData | null>(null);
-  const [accountId, setAccountId] = useState<string | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accountId, setAccountIdState] = useState<string | null>(null);
+  const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile>(null);
 
+  // 🟢 1. LOAD FROM DISK ON START
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem(KEY_ACCESS_TOKEN);
+        const storedId = await AsyncStorage.getItem(KEY_ACCOUNT_ID);
+
+        if (storedToken && storedId) {
+          console.log("💾 Session Restored from Disk:", storedId);
+          setAccessTokenState(storedToken);
+          setAccountIdState(storedId);
+          // We assume user is valid if token exists, Profile fetch in index.tsx will fill details
+          setUser({ onlineId: "Loading...", avatarUrl: null });
+        }
+      } catch (e) {
+        console.error("Failed to load session", e);
+      }
+    };
+    loadSession();
+  }, []);
+
+  // 🟢 2. WRAPPERS TO SAVE TO DISK
+  const setAccessToken = async (token: string | null) => {
+    setAccessTokenState(token);
+    if (token) await AsyncStorage.setItem(KEY_ACCESS_TOKEN, token);
+    else await AsyncStorage.removeItem(KEY_ACCESS_TOKEN);
+  };
+
+  const setAccountId = async (id: string | null) => {
+    setAccountIdState(id);
+    if (id) await AsyncStorage.setItem(KEY_ACCOUNT_ID, id);
+    else await AsyncStorage.removeItem(KEY_ACCOUNT_ID);
+  };
+
+  // 🟢 3. LOGOUT FUNCTION
+  const logout = async () => {
+    console.log("👋 Logging out...");
+    await AsyncStorage.clear(); // Wipes everything
+    setAccessTokenState(null);
+    setAccountIdState(null);
+    setUser(null);
+    setTrophies(null);
+  };
+
   // -------------------------------------------------------------------------
-  // 1. DATA FETCHING ACTIONS
+  // DATA FETCHING ACTIONS
   // -------------------------------------------------------------------------
 
   const refreshAllTrophies = useCallback(async () => {
@@ -113,7 +163,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   // -------------------------------------------------------------------------
-  // 2. WATCHDOG HOOK INTEGRATION
+  // WATCHDOG HOOK INTEGRATION
   // -------------------------------------------------------------------------
 
   const watchdog = useTrophyWatchdog({
@@ -122,7 +172,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
     onNewTrophyDetected: refreshAllTrophies,
   });
 
-  // FIX: Sync Watchdog Baseline when `trophies` changes
+  // Sync Watchdog Baseline
   useEffect(() => {
     if (trophies?.trophyTitles) {
       const total = trophies.trophyTitles.reduce((acc, t) => {
@@ -140,7 +190,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
   }, [trophies]);
 
   // -------------------------------------------------------------------------
-  // 3. PROVIDER VALUE
+  // PROVIDER VALUE
   // -------------------------------------------------------------------------
 
   const value = useMemo(
@@ -155,6 +205,7 @@ export const TrophyProvider = ({ children }: { children: React.ReactNode }) => {
       setAccessToken,
       user,
       setUser,
+      logout, // 🟢 Export Logout
     }),
     [trophies, accountId, accessToken, user, refreshAllTrophies, refreshSingleGame]
   );

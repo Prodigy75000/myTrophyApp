@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const { Buffer } = require("buffer"); // 🟢 ADD THIS LINE
 const {
   exchangeCodeForAccessToken,
   exchangeNpssoForCode, // Optional
@@ -17,8 +18,20 @@ const {
 const { mergeTrophies, enrichTitlesWithArtwork } = require("./utils/trophyHelpers");
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json());
+
+// 🟢 ADD THIS BLOCK (The Doorbell)
+app.use((req, res, next) => {
+  console.log(`🔔 SERVER HIT: ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // ---------------------------------------------------------------------------
 // MIDDLEWARE
@@ -61,7 +74,7 @@ async function fetchPSN(url, userToken) {
 // ROUTES
 // ---------------------------------------------------------------------------
 
-// 🟢 RESTORE THIS ROUTE (Fixes the 404 on Bootstrap)
+// BOOTSTRAP ENDPOINT
 app.get("/api/login", async (req, res) => {
   try {
     console.log("🌍 Guest Bootstrap initiated...");
@@ -73,49 +86,75 @@ app.get("/api/login", async (req, res) => {
   }
 });
 
-// ... (Keep the /api/auth/exchange route you added previously)
-app.post("/api/auth/exchange", async (req, res) => {
-  // ... existing logic ...
-});
-
-// 1. AUTH EXCHANGE (New)
-app.post("/api/auth/exchange", async (req, res) => {
+// 🟢 ROBUST NPSSO ROUTE
+app.post("/api/auth/npsso", async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ error: "Auth code required" });
+    const { npsso } = req.body;
+    if (!npsso) return res.status(400).json({ error: "NPSSO token required" });
 
-    console.log("🔄 Exchanging Auth Code...");
+    console.log("🔄 Exchanging NPSSO for Access Token...");
 
-    // 🟢 1. Exchange Code
-    const tokenResponse = await exchangeCodeForAccessToken(code);
+    // 1. Exchange NPSSO -> Access Code
+    const accessCode = await exchangeNpssoForCode(npsso);
+
+    // 2. Exchange Access Code -> Tokens
+    // This returns: accessToken, expiresIn, idToken, refreshToken, scope, tokenType
+    const tokenResponse = await exchangeCodeForAccessToken(accessCode);
+
     const accessToken = tokenResponse.accessToken;
+    // 🟢 Prefer idToken for identity, fallback to accessToken
+    const idToken = tokenResponse.idToken || accessToken;
 
-    // 🟢 2. Fetch User Profile to get AccountID
+    if (!accessToken) throw new Error("No access token returned");
+
+    // 3. Decode Token to get Account ID
+    // We try to decode the idToken because it ALWAYS has the 'sub' field
+    const jwtPayload = JSON.parse(
+      Buffer.from(idToken.split(".")[1], "base64").toString()
+    );
+
+    // 🟢 Debugging: Let's see what keys we actually have if this fails again
+    if (!jwtPayload.sub) {
+      console.log("⚠️ Token Payload Keys:", Object.keys(jwtPayload));
+    }
+
+    const accountId = jwtPayload.sub;
+
+    console.log(`🔓 Decoded Account ID: ${accountId}`);
+
+    if (!accountId) {
+      throw new Error("Could not find Account ID in token");
+    }
+
+    // 4. Fetch Profile
     const profileRes = await fetch(
-      "https://m.np.playstation.com/api/userProfile/v1/internal/users/me/profiles",
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      `https://m.np.playstation.com/api/userProfile/v1/internal/users/${accountId}/profiles`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "User-Agent": "Mozilla/5.0",
+          "Accept-Language": "en-US",
+        },
+      }
     );
 
     if (!profileRes.ok) throw new Error("Failed to fetch user profile");
 
     const profileData = await profileRes.json();
-    const accountId = profileData.accountId;
-    const onlineId = profileData.onlineId;
-    const avatars = profileData.avatars || [];
-    const avatarUrl = avatars.find((a) => a.size === "l")?.url || avatars[0]?.url;
-
-    console.log(`✅ Logged in as: ${onlineId} (${accountId})`);
+    console.log(`✅ Logged in as: ${profileData.onlineId}`);
 
     res.json({
       accessToken,
       refreshToken: tokenResponse.refreshToken,
       expiresIn: tokenResponse.expiresIn,
       accountId,
-      onlineId,
-      avatarUrl,
+      onlineId: profileData.onlineId,
+      avatarUrl:
+        profileData.avatars?.find((a) => a.size === "l")?.url ||
+        profileData.avatars?.[0]?.url,
     });
   } catch (err) {
-    console.error("❌ Auth Exchange Error:", err.message);
+    console.error("❌ NPSSO Exchange Error:", err.message);
     res.status(500).json({ error: "Authentication Failed", details: err.message });
   }
 });

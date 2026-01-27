@@ -124,6 +124,12 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!accountId || !accessToken) return;
 
+    console.log("🔄 User Logged In. Fetching Trophies...");
+
+    // 1. TRIGGER THE MAIN FETCH (This fills the void!)
+    refreshAllTrophies();
+
+    // 2. Fetch Local Profile Data (Keep existing logic)
     const fetchProfile = async () => {
       try {
         const res = await fetch(`${PROXY_BASE_URL}/api/user/profile/${accountId}`, {
@@ -156,7 +162,7 @@ export default function HomeScreen() {
 
     fetchProfile();
     fetchSummary();
-  }, [accountId, accessToken]);
+  }, [accountId, accessToken]); // Runs whenever these change (i.e., after login)
 
   // --- 4. HELPERS ---
 

@@ -1,3 +1,4 @@
+// components/SideMenu.styles.ts
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
@@ -32,7 +33,7 @@ export const styles = StyleSheet.create({
   },
   levelText: { color: "#ffd700", fontSize: 12, fontWeight: "800", marginLeft: 4 },
 
-  // Buttons
+  // --- Auth Buttons ---
   webButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -61,7 +62,24 @@ export const styles = StyleSheet.create({
   },
   guestButtonText: { color: "#ccc", fontSize: 14, fontWeight: "600" },
 
-  // Menu List
+  // 🟢 RED SIGN OUT BUTTON (Restored)
+  signOutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(211, 47, 47, 0.15)", // Subtle red bg
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(211, 47, 47, 0.3)", // Red border
+  },
+  signOutText: {
+    color: "#ff8a80", // Red text
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  // --- Menu List ---
   menuItems: { paddingTop: 20, paddingHorizontal: 16 },
   sectionLabel: {
     color: "#666",
@@ -96,31 +114,59 @@ export const styles = StyleSheet.create({
     marginVertical: 16,
     marginHorizontal: 4,
   },
+
+  // --- Footer Area ---
   footer: {
     padding: 20,
-    alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.05)",
   },
-  versionText: { color: "#444", fontSize: 11 },
-  // 🟢 ADD THIS
-  logoutButton: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(211, 47, 47, 0.2)", // Dark Red background
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    justifyContent: "space-between",
+    marginBottom: 15,
+  },
+  devActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  // 🟢 NEW: Specific Footer Buttons
+  devButtonPSN: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 67, 156, 0.15)", // PS Blue tint
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(211, 47, 47, 0.5)",
-    marginTop: 10,
+    borderColor: "rgba(0, 67, 156, 0.3)",
   },
-  logoutText: {
-    color: "#ff8a80", // Light Red text
-    fontSize: 14,
-    fontWeight: "600",
+  devButtonXbox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 124, 16, 0.15)", // Xbox Green tint
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(16, 124, 16, 0.3)",
   },
-  // Modal Specifics
+  devTextPSN: {
+    color: "#4da3ff",
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+  devTextXbox: {
+    color: "#107c10", // Xbox Green
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+  versionText: { color: "#444", fontSize: 11, textAlign: "center" },
+
+  // Modal
   modalContainer: { flex: 1, backgroundColor: "#101010" },
   modalHeader: {
     flexDirection: "row",

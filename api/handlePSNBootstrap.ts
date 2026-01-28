@@ -2,68 +2,65 @@
 import { PROXY_BASE_URL } from "../config/endpoints";
 
 /**
- * Expected shape of the login response from the backend.
+ * Expected shape from backend.
+ * Now supports optional refreshToken (User) vs no refreshToken (Guest).
  */
 interface LoginResponse {
   accessToken: string;
   accountId: string;
-  expiresIn?: number;
+  expiresIn: number; // 🟢 Critical for the new Auto-Refresh logic
+  refreshToken?: string;
 }
 
 /**
- * Dependencies injected to keep this function pure and testable.
- * Using generic 'unknown' for trophies data until the shape is strictly defined.
+ * 🟢 UPDATED DEPS:
+ * We replaced individual setters with the robust 'handleLoginResponse' helper.
  */
 type BootstrapDeps = {
-  setAccessToken: (token: string) => void;
-  setAccountId: (id: string) => void;
+  handleLoginResponse: (data: any) => Promise<void>; // Handles Storage + State
   setTrophies: (data: unknown) => void;
 };
 
-/**
- * Return type to let the caller handle UI feedback (Alerts, Toasts, etc.)
- */
 type BootstrapResult =
   | { success: true; data: unknown }
   | { success: false; error: string };
 
-/**
- * Handles the full PSN bootstrap flow:
- * 1. Authenticate with backend
- * 2. Fetch initial trophy data
- * 3. Update application state
- *
- * @returns A promise resolving to the operation result.
- */
 export async function handlePSNBootstrap({
-  setAccessToken,
-  setAccountId,
+  handleLoginResponse,
   setTrophies,
 }: BootstrapDeps): Promise<BootstrapResult> {
   try {
     // --------------------------------------------------
     // STEP 1: Backend Authentication
     // --------------------------------------------------
-    console.log("🔐 [PSN Bootstrap] Initiating login...");
+    console.log("🌍 [PSN Bootstrap] Initiating Guest Login...");
     const loginRes = await fetch(`${PROXY_BASE_URL}/api/login`);
 
     if (!loginRes.ok) {
-      throw new Error(`Login failed with status: ${loginRes.status}`);
+      throw new Error(`Guest Login failed with status: ${loginRes.status}`);
     }
 
     const loginData = (await loginRes.json()) as LoginResponse;
 
-    // Validate critical fields before proceeding
+    // Validate critical fields
     if (!loginData.accessToken || !loginData.accountId) {
-      throw new Error("Malformed login response: Missing token or account ID.");
+      throw new Error("Malformed bootstrap response: Missing token or account ID.");
     }
 
-    console.log("✅ [PSN Bootstrap] Login successful.");
+    console.log("✅ [PSN Bootstrap] Guest Auth Successful.");
 
     // --------------------------------------------------
-    // STEP 2: Fetch Trophies
+    // STEP 2: Persist Session (The New Logic)
     // --------------------------------------------------
-    console.log("🏆 [PSN Bootstrap] Fetching trophy data...");
+    // 🟢 This saves to AsyncStorage AND sets the "expiresAt" timer.
+    // This treats Guest sessions as "First Class Citizens" so they persist on restart.
+    await handleLoginResponse(loginData);
+
+    // --------------------------------------------------
+    // STEP 3: Fetch Trophies
+    // --------------------------------------------------
+    console.log("🏆 [PSN Bootstrap] Fetching initial trophy data...");
+
     const trophiesRes = await fetch(
       `${PROXY_BASE_URL}/api/trophies/${loginData.accountId}`,
       {
@@ -75,26 +72,22 @@ export async function handlePSNBootstrap({
     );
 
     if (!trophiesRes.ok) {
-      throw new Error(`Trophy fetch failed with status: ${trophiesRes.status}`);
+      throw new Error(`Trophy fetch failed: ${trophiesRes.status}`);
     }
 
     const trophiesData = await trophiesRes.json();
 
     // --------------------------------------------------
-    // STEP 3: State Hydration
+    // STEP 4: Update UI Data
     // --------------------------------------------------
-    setAccessToken(loginData.accessToken);
-    setAccountId(loginData.accountId);
     setTrophies(trophiesData);
 
     return { success: true, data: trophiesData };
   } catch (error: any) {
-    console.error("❌ [PSN Bootstrap] Error:", error);
-
-    // Return the error so the UI can decide whether to Alert or show a message
+    console.error("❌ [PSN Bootstrap] Failed:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
+      error: error instanceof Error ? error.message : "Bootstrap failed",
     };
   }
 }

@@ -22,14 +22,12 @@ import masterGamesRaw from "../../data/master_games.json";
 const HEADER_HEIGHT = 60;
 
 export default function GameScreen() {
-  // 🟢 Destructure contextMode
   const { id: rawId, artParam, contextMode } = useLocalSearchParams();
   const gameId = Array.isArray(rawId) ? rawId[0] : rawId;
   const contextModeStr = Array.isArray(contextMode) ? contextMode[0] : contextMode;
 
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-
   const { trophies } = useTrophy();
 
   // --- UI STATE ---
@@ -42,62 +40,52 @@ export default function GameScreen() {
   // --- DATA HOOK ---
   const {
     game,
-    isInitialLoading,
+    isLoadingDetails, // 🟢 Renamed for clarity: Only affects the list!
     refreshing,
     onRefresh,
     processedTrophies,
     groupedData,
     justEarnedIds,
-  } = useGameDetails(gameId, searchText, sortMode, sortDirection);
+  } = useGameDetails(gameId, searchText, sortMode as any, sortDirection);
 
-  // --- 🧠 SIBLING & REGION LOGIC ---
+  // --- 🟢 STALE DATA CHECK ---
+  // If we have a game object, but its ID doesn't match the URL,
+  // it means the hook hasn't updated yet. We show skeletons for the LIST only.
+  const isDataStale = game && String(game.npCommunicationId) !== String(gameId);
+  const showListSkeletons = isLoadingDetails || isDataStale || !game;
+
+  // --- MEMOIZED LOGIC (Versions) ---
   const versions = useMemo(() => {
     if (!gameId) return [];
-
-    // 1. Find Master Entry
     const entry = (masterGamesRaw as any[]).find((g) =>
       g.linkedVersions?.some((v: any) => v.npCommunicationId === gameId)
     );
 
     let rawList: any[] = [];
-
     if (entry && entry.linkedVersions) {
-      // 2. Map Data
       rawList = entry.linkedVersions.map((v: any) => ({
         id: v.npCommunicationId,
         platform: v.platform,
         region: v.region,
       }));
     } else {
-      // Fallback
-      rawList = [
-        {
-          id: gameId,
-          platform: game ? game.trophyTitlePlatform : "PSN",
-        },
-      ];
+      rawList = [{ id: gameId, platform: game ? game.trophyTitlePlatform : "PSN" }];
     }
 
-    // 3. Deduplicate
     const uniqueMap = new Map();
     rawList.forEach((v: any) => {
       if (!uniqueMap.has(v.id)) uniqueMap.set(v.id, v);
     });
     const uniqueList = Array.from(uniqueMap.values());
 
-    // 🟢 4. FILTER LOGIC
     const isDiscoverMode = contextModeStr === "GLOBAL";
-
     if (!isDiscoverMode && trophies?.trophyTitles) {
-      // Library mode: Filter to only show siblings the user actually owns.
       return uniqueList.filter((v: any) => {
         return trophies.trophyTitles.some(
           (owned: any) => String(owned.npCommunicationId) === String(v.id)
         );
       });
     }
-
-    // Otherwise (Discover mode), return everything.
     return uniqueList;
   }, [gameId, game, trophies, contextModeStr]);
 
@@ -110,6 +98,11 @@ export default function GameScreen() {
   });
 
   // --- EFFECTS ---
+  useEffect(() => {
+    scrollY.setValue(0);
+    setCollapsedGroups(new Set());
+  }, [gameId]);
+
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
@@ -130,8 +123,6 @@ export default function GameScreen() {
       return next;
     });
   };
-
-  if (!game) return <View style={styles.loadingContainer} />;
 
   return (
     <View style={styles.container}>
@@ -171,66 +162,76 @@ export default function GameScreen() {
         })}
         scrollEventThrottle={16}
       >
-        <GameHero
-          iconUrl={game.trophyTitleIconUrl}
-          title={game.trophyTitleName}
-          platform={game.trophyTitlePlatform}
-          progress={game.progress}
-          earnedTrophies={game.earnedTrophies}
-          definedTrophies={game.definedTrophies}
-          displayArt={typeof artParam === "string" ? artParam : null}
-          versions={versions}
-          activeId={gameId}
-          // 🟢 PASS IT DOWN
-          contextMode={contextModeStr}
-        />
+        {/* 🟢 HERO: Render IMMEDIATELY if 'game' exists (Cached Data) */}
+        {game && (
+          <GameHero
+            iconUrl={game.trophyTitleIconUrl}
+            title={game.trophyTitleName}
+            platform={game.trophyTitlePlatform}
+            progress={game.progress}
+            earnedTrophies={game.earnedTrophies}
+            definedTrophies={game.definedTrophies}
+            displayArt={typeof artParam === "string" ? artParam : null}
+            versions={versions}
+            activeId={gameId}
+            contextMode={contextModeStr}
+          />
+        )}
 
-        {isInitialLoading && (
-          <View>
-            {Array.from({ length: 6 }).map((_, i) => (
+        {/* 🟢 SKELETONS: Only for the list area while details fetch */}
+        {showListSkeletons && (
+          <View style={{ paddingTop: 20, paddingHorizontal: 16 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
               <TrophySkeleton key={i} />
             ))}
           </View>
         )}
 
-        <View>
-          {sortMode === "DEFAULT" && groupedData
-            ? groupedData.map((group: any) => {
-                const isCollapsed = collapsedGroups.has(group.id);
-                return (
-                  <View key={group.id}>
-                    <TrophyGroupHeader
-                      title={group.name}
-                      isBaseGame={group.isBaseGame}
-                      counts={group.counts}
-                      earnedCounts={group.earnedCounts}
-                      progress={group.progress}
-                      collapsed={isCollapsed}
-                      onToggle={() => toggleGroup(group.id)}
-                    />
-                    {!isCollapsed &&
-                      group.trophies.map((trophy: any) => (
-                        <TrophyCard
-                          key={trophy.trophyId}
-                          {...mapTrophyToProps(trophy, justEarnedIds, setSelectedTrophy)}
-                        />
-                      ))}
-                  </View>
-                );
-              })
-            : processedTrophies.map((trophy: any) => (
-                <TrophyCard
-                  key={trophy.trophyId}
-                  {...mapTrophyToProps(trophy, justEarnedIds, setSelectedTrophy)}
-                />
-              ))}
-        </View>
+        {/* 🟢 TROPHY LIST: Show only when data is ready */}
+        {!showListSkeletons && (
+          <View>
+            {sortMode === "DEFAULT" && groupedData
+              ? groupedData.map((group: any) => {
+                  const isCollapsed = collapsedGroups.has(group.id);
+                  return (
+                    <View key={group.id}>
+                      <TrophyGroupHeader
+                        title={group.name}
+                        isBaseGame={group.isBaseGame}
+                        counts={group.counts}
+                        earnedCounts={group.earnedCounts}
+                        progress={group.progress}
+                        collapsed={isCollapsed}
+                        onToggle={() => toggleGroup(group.id)}
+                      />
+                      {!isCollapsed &&
+                        group.trophies.map((trophy: any) => (
+                          <TrophyCard
+                            key={trophy.trophyId}
+                            {...mapTrophyToProps(
+                              trophy,
+                              justEarnedIds,
+                              setSelectedTrophy
+                            )}
+                          />
+                        ))}
+                    </View>
+                  );
+                })
+              : processedTrophies.map((trophy: any) => (
+                  <TrophyCard
+                    key={trophy.trophyId}
+                    {...mapTrophyToProps(trophy, justEarnedIds, setSelectedTrophy)}
+                  />
+                ))}
+          </View>
+        )}
       </Animated.ScrollView>
 
       <TrophyActionSheet
         visible={!!selectedTrophy}
         onClose={() => setSelectedTrophy(null)}
-        gameName={game.trophyTitleName}
+        gameName={game?.trophyTitleName ?? ""}
         trophyName={selectedTrophy?.name ?? ""}
         trophyType={selectedTrophy?.type ?? "bronze"}
         trophyIconUrl={selectedTrophy?.iconUrl}
@@ -265,7 +266,6 @@ const mapTrophyToProps = (
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
-  loadingContainer: { flex: 1, backgroundColor: "#000" },
   headerContainer: {
     position: "absolute",
     top: 0,

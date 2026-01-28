@@ -39,8 +39,8 @@ function getPrimeVersion(versions) {
 
 async function authenticate() {
   console.log("🔑 Authenticating with PSN...");
-  const npsso = process.env.PSN_NPSSO;
-  if (!npsso) throw new Error("Missing PSN_NPSSO in .env");
+  const npsso = process.env.NPSSO;
+  if (!npsso) throw new Error("Missing NPSSO in .env");
   const code = await exchangeNpssoForCode(npsso);
   return await exchangeCodeForAccessToken(code);
 }

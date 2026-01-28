@@ -2,15 +2,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, FlatList, Text, TouchableOpacity, View } from "react-native";
 import {
   Gesture,
   GestureDetector,
@@ -24,11 +17,12 @@ import { PROXY_BASE_URL } from "../config/endpoints";
 import { useTrophy } from "../providers/TrophyContext";
 
 // Custom Hooks
-import { PlatformFilter } from "../components/HeaderActionBar"; // Import type
+import { PlatformFilter } from "../components/HeaderActionBar";
 import { useTrophyFilter } from "../hooks/useTrophyFilter";
-// ⚠️ LOAD MASTER JSON
-// For now, assume it's in ../data/master_games.json
-// If it's too huge, we might need to lazy load it later.
+
+// ⚠️ DATA LOADING STRATEGY
+// We statically import the "High Quality" database.
+// We DO NOT import master_shovelware.json here to save memory.
 import masterGamesRaw from "../data/master_games.json";
 
 // Components
@@ -43,13 +37,17 @@ import GameCard from "../components/trophies/GameCard";
 import GameGridItem from "../components/trophies/GameGridItem";
 import ProfileDashboard from "../components/trophies/ProfileDashboard";
 
+// Styles
+import { styles } from "./index.styles";
+
 const BASE_HEADER_HEIGHT = 60;
 const STORAGE_KEY_GRID = "USER_GRID_COLUMNS";
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { trophies, accountId, accessToken, refreshAllTrophies } = useTrophy();
+  const { trophies, accountId, accessToken, refreshAllTrophies, xboxTitles } =
+    useTrophy();
 
   // --- 1. UI STATE ---
   const [searchText, setSearchText] = useState("");
@@ -91,11 +89,33 @@ export default function HomeScreen() {
     PSVITA: true,
   });
 
-  // --- 2. LOGIC HOOKS ---
-  // We offload the heavy filtering/sorting to our custom hook
+  // --- 2. DATA STRATEGY (Lazy Load Shovelware) ---
+  const masterDatabase = useMemo(() => {
+    // A. Always load the Good Games
+    const highQualityGames = masterGamesRaw as unknown as any[];
+
+    // B. If user wants Shovelware, lazy-load that JSON now
+    if (showShovelware) {
+      try {
+        console.log("⚠️ Loading Shovelware Database into memory...");
+        // This 'require' only executes if the switch is ON
+        const shovelwareGames = require("../data/master_shovelware.json");
+        return [...highQualityGames, ...shovelwareGames];
+      } catch (e) {
+        console.warn("Could not load shovelware database", e);
+        return highQualityGames;
+      }
+    }
+
+    // C. Default: Only return the Good Games
+    return highQualityGames;
+  }, [showShovelware]);
+
+  // --- 3. LOGIC HOOKS ---
   const { userStats, sortedList } = useTrophyFilter(
     trophies,
-    masterGamesRaw as unknown as any[],
+    masterDatabase, // 🟢 Pass the dynamic database
+    xboxTitles,
     searchText,
     filterMode,
     ownershipMode,
@@ -105,12 +125,12 @@ export default function HomeScreen() {
     showShovelware,
     platforms
   );
-  // Helper to toggle platform
+
   const togglePlatform = (key: keyof PlatformFilter) => {
     setPlatforms((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // --- 3. EFFECTS ---
+  // --- 4. EFFECTS ---
 
   // Load Grid Settings
   useEffect(() => {
@@ -126,10 +146,10 @@ export default function HomeScreen() {
 
     console.log("🔄 User Logged In. Fetching Trophies...");
 
-    // 1. TRIGGER THE MAIN FETCH (This fills the void!)
+    // 1. TRIGGER THE MAIN FETCH
     refreshAllTrophies();
 
-    // 2. Fetch Local Profile Data (Keep existing logic)
+    // 2. Fetch Local Profile Data
     const fetchProfile = async () => {
       try {
         const res = await fetch(`${PROXY_BASE_URL}/api/user/profile/${accountId}`, {
@@ -162,9 +182,9 @@ export default function HomeScreen() {
 
     fetchProfile();
     fetchSummary();
-  }, [accountId, accessToken]); // Runs whenever these change (i.e., after login)
+  }, [accountId, accessToken]);
 
-  // --- 4. HELPERS ---
+  // --- 5. HELPERS ---
 
   const showToast = (text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -188,8 +208,8 @@ export default function HomeScreen() {
     const MAX_COLS = 4;
 
     if (scale > 1.2)
-      newCols = Math.max(MIN_COLS, gridColumns - 1); // Zoom in -> bigger
-    else if (scale < 0.8) newCols = Math.min(MAX_COLS, gridColumns + 1); // Zoom out -> smaller
+      newCols = Math.max(MIN_COLS, gridColumns - 1); // Zoom in
+    else if (scale < 0.8) newCols = Math.min(MAX_COLS, gridColumns + 1); // Zoom out
 
     if (newCols !== gridColumns) {
       setGridColumns(newCols);
@@ -197,6 +217,7 @@ export default function HomeScreen() {
       showToast(`Grid: ${newCols === 2 ? "Large" : newCols === 3 ? "Medium" : "Small"}`);
     }
   };
+
   const pinchGesture = Gesture.Pinch()
     .enabled(viewMode === "GRID")
     .onEnd((e) => {
@@ -210,29 +231,22 @@ export default function HomeScreen() {
     outputRange: [0, -totalHeaderHeight],
   });
 
-  // --- 5. RENDER ---
+  // --- 6. RENDER ---
   const renderItem = ({ item }: { item: any }) => {
-    // 'item' is now a GROUP: { title, icon, art, versions: [...] }
-
-    // Check if ANY version in the stack is pinned
     const isPinned = item.versions.some((v: any) => pinnedIds.has(v.id));
-
-    // For GRID view: We need to pick one version to display (e.g. highest progress or PS5)
-    // We sort versions to find the "Best" one to show on the grid tile
-    const bestVersion = [...item.versions].sort((a, b) => b.progress - a.progress)[0];
 
     if (viewMode === "GRID") {
       return (
         <GameGridItem
-          versions={item.versions} // The component calculates the best version itself now
+          versions={item.versions}
           numColumns={gridColumns}
           justUpdated={false}
           isPinned={isPinned}
-          onPin={() => togglePin(item.id)} // Use Group ID
+          onPin={() => togglePin(item.id)}
           isPeeking={activePeekId === item.id}
           title={item.title}
-          icon={item.icon} // 🟢 SQUARE (Display)
-          heroArt={item.art} // 🟢 16:9 (For Navigation)
+          icon={item.icon}
+          heroArt={item.art}
           onTogglePeek={() =>
             setActivePeekId((prev) => (prev === item.id ? null : item.id))
           }
@@ -241,13 +255,12 @@ export default function HomeScreen() {
       );
     }
 
-    // LIST view (GameCard handles the stack internally)
     return (
       <GameCard
         title={item.title}
         icon={item.icon}
         art={item.art}
-        versions={item.versions} // 👈 Passing the full stack
+        versions={item.versions}
         isPinned={isPinned}
         onPin={(id) => togglePin(id)}
         sourceMode={ownershipMode}
@@ -280,8 +293,8 @@ export default function HomeScreen() {
           onSortDirectionChange={() =>
             setSortDirection((prev) => (prev === "ASC" ? "DESC" : "ASC"))
           }
-          ownershipMode={ownershipMode} // 👈 Pass it
-          onOwnershipChange={setOwnershipMode} // 👈 Pass setter
+          ownershipMode={ownershipMode}
+          onOwnershipChange={setOwnershipMode}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onFilterChange={setFilterMode}
@@ -362,38 +375,3 @@ export default function HomeScreen() {
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#4da3ff",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  toastContainer: {
-    position: "absolute",
-    bottom: 90,
-    alignSelf: "center",
-    backgroundColor: "rgba(30, 30, 45, 0.95)",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    zIndex: 2000,
-  },
-  toastText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "bold",
-  },
-});

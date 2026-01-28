@@ -6,13 +6,15 @@ import {
   Animated,
   Image,
   ImageSourcePropType,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
+
+// Styles
+import { IMG_SIZE, styles } from "./GameCard.styles";
 
 // ... Assets ...
 const ICONS = {
@@ -21,7 +23,6 @@ const ICONS = {
   gold: require("../../assets/icons/trophies/gold.png"),
   platinum: require("../../assets/icons/trophies/platinum.png"),
 };
-const IMG_SIZE = 124;
 
 type StatItemProps = {
   icon: ImageSourcePropType;
@@ -59,6 +60,8 @@ export type GameVersion = {
     earnedSilver: number;
     earnedGold: number;
     earnedPlatinum: number;
+    // 🟢 ADDED: Optional generic 'earned' for Gamerscore
+    earned?: number;
   };
   isOwned: boolean;
 };
@@ -71,7 +74,6 @@ type GameCardProps = {
   justUpdated?: boolean;
   isPinned?: boolean;
   onPin?: (id: string) => void;
-  // 🟢 NEW PROP
   sourceMode?: "OWNED" | "GLOBAL" | "UNOWNED";
 };
 
@@ -83,7 +85,7 @@ const GameCard = ({
   justUpdated,
   isPinned,
   onPin,
-  sourceMode, // 🟢 Destructure
+  sourceMode,
 }: GameCardProps) => {
   const router = useRouter();
 
@@ -122,11 +124,14 @@ const GameCard = ({
   const isSquareFormat = activeVer.platform === "PS5";
   const imageResizeMode = isSquareFormat ? "cover" : "contain";
 
+  // Check if started (Generic: Trophies OR Gamerscore)
   const totalEarned =
+    (activeVer.counts.earned || 0) + // Check Gamerscore first
     activeVer.counts.earnedBronze +
     activeVer.counts.earnedSilver +
     activeVer.counts.earnedGold +
     activeVer.counts.earnedPlatinum;
+
   const hasStarted = totalEarned > 0;
 
   useEffect(() => {
@@ -148,6 +153,89 @@ const GameCard = ({
     outputRange: ["rgba(0,0,0,0)", "rgba(255, 215, 0, 0.8)"],
   });
 
+  // 🟢 1. RENDER STATS LOGIC
+  const renderStats = () => {
+    // A. XBOX MODE (Gamerscore)
+    if (activeVer.platform === "XBOX") {
+      return (
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 }}
+        >
+          {/* Gamerscore Badge */}
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: "rgba(16, 124, 16, 0.2)",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 6,
+                borderWidth: 1,
+                borderColor: "rgba(16, 124, 16, 0.3)",
+              }}
+            >
+              <MaterialCommunityIcons name="trophy-variant" size={14} color="#107c10" />
+            </View>
+            <Text style={{ color: "#fff", fontSize: 13, fontWeight: "800" }}>
+              {activeVer.counts.earned ?? 0}
+              <Text style={{ color: "#666", fontSize: 11, fontWeight: "600" }}>
+                {" "}
+                / {activeVer.counts.total} G
+              </Text>
+            </Text>
+          </View>
+
+          {/* Completed Badge */}
+          {activeVer.progress === 100 && (
+            <View
+              style={{
+                backgroundColor: "rgba(16, 124, 16, 0.2)",
+                paddingHorizontal: 6,
+                paddingVertical: 3,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: "rgba(16, 124, 16, 0.3)",
+              }}
+            >
+              <Text style={{ color: "#107c10", fontSize: 9, fontWeight: "bold" }}>
+                COMPLETED
+              </Text>
+            </View>
+          )}
+        </View>
+      );
+    }
+
+    // B. PSN MODE (Trophies)
+    return (
+      <View style={styles.statsRow}>
+        <StatItem
+          icon={ICONS.platinum}
+          earned={activeVer.counts.earnedPlatinum}
+          total={activeVer.counts.platinum}
+          disabled={activeVer.counts.platinum === 0}
+        />
+        <StatItem
+          icon={ICONS.gold}
+          earned={activeVer.counts.earnedGold}
+          total={activeVer.counts.gold}
+        />
+        <StatItem
+          icon={ICONS.silver}
+          earned={activeVer.counts.earnedSilver}
+          total={activeVer.counts.silver}
+        />
+        <StatItem
+          icon={ICONS.bronze}
+          earned={activeVer.counts.earnedBronze}
+          total={activeVer.counts.bronze}
+        />
+      </View>
+    );
+  };
+
   return (
     <View style={styles.wrapper}>
       <TouchableOpacity
@@ -155,7 +243,6 @@ const GameCard = ({
         onPress={() =>
           router.push({
             pathname: "/game/[id]",
-            // 🟢 PASS THE MODE TO THE DETAILS SCREEN
             params: { id: activeVer.id, artParam: heroArt, contextMode: sourceMode },
           })
         }
@@ -202,29 +289,10 @@ const GameCard = ({
             <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
               {title}
             </Text>
-            <View style={styles.statsRow}>
-              <StatItem
-                icon={ICONS.platinum}
-                earned={activeVer.counts.earnedPlatinum}
-                total={activeVer.counts.platinum}
-                disabled={activeVer.counts.platinum === 0}
-              />
-              <StatItem
-                icon={ICONS.gold}
-                earned={activeVer.counts.earnedGold}
-                total={activeVer.counts.gold}
-              />
-              <StatItem
-                icon={ICONS.silver}
-                earned={activeVer.counts.earnedSilver}
-                total={activeVer.counts.silver}
-              />
-              <StatItem
-                icon={ICONS.bronze}
-                earned={activeVer.counts.earnedBronze}
-                total={activeVer.counts.bronze}
-              />
-            </View>
+
+            {/* 🟢 2. INJECT RENDER HELPER HERE */}
+            {renderStats()}
+
             {hasStarted ? (
               <Text style={styles.dateText}>
                 Last Earned: {formatDate(activeVer.lastPlayed)}
@@ -257,75 +325,3 @@ const GameCard = ({
 };
 
 export default memo(GameCard);
-
-const styles = StyleSheet.create({
-  wrapper: { position: "relative" },
-  cardContainer: {
-    flexDirection: "row",
-    backgroundColor: "#1e1e2d",
-    borderRadius: 12,
-    padding: 1,
-    marginVertical: 1,
-    width: "100%",
-    alignItems: "center",
-  },
-  imageColumn: { position: "relative", marginRight: 14, alignItems: "center" },
-  imageWrapper: {
-    width: IMG_SIZE,
-    height: IMG_SIZE,
-    borderRadius: 8,
-    backgroundColor: "#111",
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  image: { width: "100%", height: "100%" },
-  versionRow: {
-    position: "absolute",
-    bottom: 4,
-    left: 4,
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.85)",
-    borderRadius: 4,
-    padding: 2,
-    gap: 2,
-  },
-  versionBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-  versionActive: { backgroundColor: "#4da3ff" },
-  versionInactive: { backgroundColor: "transparent" },
-  versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
-  infoColumn: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingVertical: 6,
-    marginRight: 8,
-  },
-  title: { color: "#fff", fontSize: 14, fontWeight: "700", paddingRight: 0 },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 0,
-  },
-  statItemContainer: { width: 44, alignItems: "center", marginRight: 4 },
-  statItemDisabled: { opacity: 0.5 },
-  statIcon: { width: 24, height: 24, marginBottom: 2 },
-  statTotal: { color: "#666", fontSize: 11, fontWeight: "600" },
-  statEarned: { fontWeight: "800", fontSize: 13 },
-  circleColumn: { justifyContent: "center", alignItems: "center", paddingRight: 4 },
-  dateText: { color: "#888", fontSize: 11 },
-  pinButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 16,
-    backgroundColor: "rgba(20, 20, 30, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
-    zIndex: 10,
-  },
-});

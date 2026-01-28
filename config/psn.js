@@ -6,7 +6,7 @@ const { Buffer } = require("buffer");
 // Cache implementation
 let serviceAuthCache = null;
 
-const NPSSO = process.env.PSN_NPSSO;
+const NPSSO = process.env.NPSSO;
 
 /**
  * Retrieves a valid PSN Access Token (cached or fresh).
@@ -17,7 +17,7 @@ async function getServiceAuth() {
     return serviceAuthCache;
   }
 
-  if (!NPSSO) throw new Error("Missing PSN_NPSSO in environment variables.");
+  if (!NPSSO) throw new Error("Missing NPSSO in environment variables.");
 
   console.log("🔄 Refreshing PSN Service Token...");
   const code = await exchangeNpssoForCode(NPSSO);

@@ -6,6 +6,7 @@ import { PROXY_BASE_URL } from "../config/endpoints";
 type WatchdogProps = {
   accessToken: string | null;
   accountId: string | null;
+  isReady: boolean;
   onNewTrophyDetected: () => void;
 };
 
@@ -16,13 +17,14 @@ type WatchdogProps = {
 export function useTrophyWatchdog({
   accessToken,
   accountId,
+  isReady,
   onNewTrophyDetected,
 }: WatchdogProps) {
   const lastTotalTrophiesRef = useRef<number>(-1);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
-    if (!accessToken || !accountId) return;
+    if (!accessToken || !accountId || !isReady) return;
 
     const checkTrophyCount = async () => {
       try {

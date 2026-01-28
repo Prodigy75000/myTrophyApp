@@ -7,6 +7,8 @@ import type {
   SortDirection,
   SortMode,
 } from "../components/HeaderActionBar";
+import { XboxTitle } from "../types/XboxTypes";
+import { calculateUserStats } from "../utils/trophyCalculations";
 
 // Helper to calculate counts
 const getCounts = (game: any) => ({
@@ -39,6 +41,7 @@ const normalizePlatform = (raw: string | undefined | null) => {
 export function useTrophyFilter(
   userTrophies: any | null,
   masterGames: any[],
+  xboxTitles: XboxTitle[], // 🟢 Added Argument
   searchText: string,
   filterMode: FilterMode,
   ownershipMode: OwnershipMode,
@@ -50,22 +53,8 @@ export function useTrophyFilter(
 ) {
   // 1. CALCULATE STATS
   const userStats = useMemo(() => {
-    if (!userTrophies?.trophyTitles) return null;
-    return userTrophies.trophyTitles.reduce(
-      (acc: any, game: any) => {
-        acc.bronze += game.earnedTrophies.bronze;
-        acc.silver += game.earnedTrophies.silver;
-        acc.gold += game.earnedTrophies.gold;
-        acc.platinum += game.earnedTrophies.platinum;
-        acc.total +=
-          game.earnedTrophies.bronze +
-          game.earnedTrophies.silver +
-          game.earnedTrophies.gold +
-          game.earnedTrophies.platinum;
-        return acc;
-      },
-      { bronze: 0, silver: 0, gold: 0, platinum: 0, total: 0 }
-    );
+    // 🟢 CLEANER: Use helper
+    return calculateUserStats(userTrophies?.trophyTitles);
   }, [userTrophies]);
 
   // 2. CREATE LOOKUP MAP
@@ -149,7 +138,48 @@ export function useTrophyFilter(
       });
     });
 
-    // B. Process Unowned (Global Search)
+    // 🟢 B. Process Xbox Games (NEW)
+    if (xboxTitles) {
+      xboxTitles.forEach((xboxGame: XboxTitle) => {
+        // 1. Try to find Master Entry by Name (Heuristic for now)
+        // Later, this will be: masterEntry.linkedVersions.find(v => v.platform === 'XBOX' && v.id === xboxGame.titleId)
+        const masterEntry = masterGames.find((m) => m.displayName === xboxGame.name);
+
+        const groupKey = masterEntry?.canonicalId || `xbox_${xboxGame.titleId}`;
+
+        if (!groupedMap.has(groupKey)) {
+          // Create group if it doesn't exist
+          groupedMap.set(groupKey, {
+            id: groupKey,
+            title: xboxGame.name,
+            icon: xboxGame.displayImage,
+            art: xboxGame.displayImage,
+            versions: [],
+          });
+        }
+
+        // Push Xbox Version
+        groupedMap.get(groupKey).versions.push({
+          id: xboxGame.titleId,
+          platform: "XBOX", // 🟢 New Platform Tag
+          region: "Global",
+          progress: xboxGame.achievement.progressPercentage,
+          lastPlayed: xboxGame.lastUnlock,
+          counts: {
+            total: xboxGame.achievement.totalGamerscore, // Mapping Gamerscore to "Total"
+            earned: xboxGame.achievement.currentGamerscore, // Mapping Score to "Earned"
+            // Xbox doesn't have Plat/Gold/Silver, so we leave them 0 or map differently
+            bronze: 0,
+            silver: 0,
+            gold: 0,
+            platinum: 0,
+          },
+          isOwned: true,
+        });
+      });
+    }
+
+    // C. Process Unowned (Global Search)
     if (ownershipMode !== "OWNED") {
       masterGames.forEach((masterGame: any) => {
         const groupKey = masterGame.canonicalId;
@@ -210,7 +240,7 @@ export function useTrophyFilter(
       (g) => g.versions.length > 0
     );
 
-    // C. FILTERING
+    // D. FILTERING
     if (!showShovelware) {
       combinedList = combinedList.filter((g) => !g.tags?.includes("shovelware"));
     }
@@ -241,6 +271,7 @@ export function useTrophyFilter(
     ownershipMode,
     showShovelware,
     platforms,
+    xboxTitles, // 🟢 Add dependency
   ]);
 
   // 4. SORTING

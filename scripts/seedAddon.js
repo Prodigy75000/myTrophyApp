@@ -55,8 +55,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function authenticate() {
   console.log("🔑 Authenticating...");
-  const npsso = process.env.PSN_NPSSO;
-  if (!npsso) throw new Error("Missing PSN_NPSSO");
+  const npsso = process.env.NPSSO;
+  if (!npsso) throw new Error("Missing NPSSO");
   const code = await exchangeNpssoForCode(npsso);
   return await exchangeCodeForAccessToken(code);
 }

@@ -2,10 +2,15 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+console.log(
+  "🔑 LOADED NPSSO:",
+  process.env.NPSSO ? process.env.NPSSO.substring(0, 5) + "..." : "UNDEFINED"
+);
 const { Buffer } = require("buffer"); // 🟢 ADD THIS LINE
 const {
   exchangeCodeForAccessToken,
   exchangeNpssoForCode, // Optional
+  exchangeRefreshTokenForAccessToken, // 🟢 ADD THIS for the next step!
 } = require("psn-api");
 
 dotenv.config();
@@ -83,6 +88,34 @@ app.get("/api/login", async (req, res) => {
   } catch (err) {
     console.error("❌ Bootstrap Error:", err.message);
     res.status(500).json({ error: "PSN Login Failed", details: err.message });
+  }
+});
+
+// 🟢 NEW: REFRESH TOKEN ROUTE
+app.post("/api/auth/refresh", async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(400).json({ error: "Refresh token required" });
+
+    console.log("🔄 Refreshing Access Token...");
+
+    // Ask Sony for a fresh token using the Refresh Token
+    const tokenResponse = await exchangeRefreshTokenForAccessToken(refreshToken);
+
+    // Get the new Access Token
+    const accessToken = tokenResponse.accessToken;
+    if (!accessToken) throw new Error("Failed to refresh token");
+
+    console.log("✅ Token Refreshed Successfully!");
+
+    res.json({
+      accessToken,
+      refreshToken: tokenResponse.refreshToken, // Sony gives us a new refresh token too
+      expiresIn: tokenResponse.expiresIn,
+    });
+  } catch (err) {
+    console.error("❌ Refresh Error:", err.message);
+    res.status(401).json({ error: "Session Expired", details: err.message });
   }
 });
 

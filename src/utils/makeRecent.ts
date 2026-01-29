@@ -1,7 +1,7 @@
 // utils/makeRecent.ts
 
 // 1. Import 'RecentGame' type from the context file
-import { RecentGame, useRecentGames } from "../context/RecentGamesContext";
+import { RecentGame, useRecentGames } from "../../context/RecentGamesContext";
 
 /**
  * Hook that provides a function to update the global "Recent Games" history.

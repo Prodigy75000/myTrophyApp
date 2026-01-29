@@ -9,9 +9,9 @@ import React, {
   useState,
 } from "react";
 import { PROXY_BASE_URL } from "../config/endpoints";
-import { useTrophyWatchdog } from "../hooks/useTrophyWatchdog";
-import { XboxProfile, XboxTitle } from "../types/XboxTypes"; // Import types
-import { calculateTotalTrophies } from "../utils/trophyCalculations";
+import { useTrophyWatchdog } from "../src/hooks/useTrophyWatchdog";
+import { XboxProfile, XboxTitle } from "../src/types/XboxTypes"; // Import types
+import { calculateTotalTrophies } from "../src/utils/trophyCalculations";
 
 // STORAGE KEYS
 const KEY_ACCESS_TOKEN = "user_access_token";

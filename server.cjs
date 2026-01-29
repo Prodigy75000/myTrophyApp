@@ -20,7 +20,9 @@ const {
   fetchWithAutoRefresh, // Still used for generic bootstrap calls
   fetchWithFallback, // 🟢 Ensure this is imported
 } = require("./config/psn");
-const { mergeTrophies, enrichTitlesWithArtwork } = require("./utils/trophyHelpers");
+const { mergeTrophies, enrichTitlesWithArtwork } = require("./src/utils/trophyHelpers");
+// 🟢 XBOX AUTHENTICATION CONSTANTS
+const AZURE_CLIENT_ID = "5e278654-b281-411b-85f4-eb7fb056e5ba"; // Same ID as frontend
 
 const app = express();
 app.use(
@@ -78,6 +80,126 @@ async function fetchPSN(url, userToken) {
 // ---------------------------------------------------------------------------
 // ROUTES
 // ---------------------------------------------------------------------------
+
+// 🟢 ROUTE: EXCHANGE OAUTH CODE FOR XSTS TOKENS
+app.post("/xbox/exchange", async (req, res) => {
+  const { code, redirectUri, codeVerifier } = req.body;
+
+  try {
+    console.log("🔄 [Xbox] Step 1: Exchanging OAuth Code...");
+
+    // 1. Exchange Code for Microsoft Access Token
+    const tokenParams = new URLSearchParams({
+      client_id: AZURE_CLIENT_ID,
+      scope: "XboxLive.Signin offline_access",
+      code: code,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+      code_verifier: codeVerifier, // PKCE Security
+    });
+
+    const tokenRes = await fetch("https://login.live.com/oauth20_token.srf", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenParams.toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok)
+      throw new Error(tokenData.error_description || "OAuth Exchange Failed");
+
+    const accessToken = tokenData.access_token;
+
+    // 2. Exchange Access Token for Xbox Live User Token
+    console.log("🔄 [Xbox] Step 2: Getting User Token...");
+    const xblRes = await fetch("https://user.auth.xboxlive.com/user/authenticate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        Properties: {
+          AuthMethod: "RPS",
+          SiteName: "user.auth.xboxlive.com",
+          RpsTicket: `d=${accessToken}`, // The magic format
+        },
+        RelyingParty: "http://auth.xboxlive.com",
+        TokenType: "JWT",
+      }),
+    });
+
+    const xblData = await xblRes.json();
+    if (!xblRes.ok) throw new Error("XBL Auth Failed");
+
+    const xblToken = xblData.Token;
+
+    // 3. Exchange XBL Token for XSTS Token (The "Real" Key)
+    console.log("🔄 [Xbox] Step 3: Getting XSTS Token...");
+    const xstsRes = await fetch("https://xsts.auth.xboxlive.com/xsts/authorize", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        Properties: {
+          SandboxId: "RETAIL",
+          UserTokens: [xblToken],
+        },
+        RelyingParty: "http://xboxlive.com",
+        TokenType: "JWT",
+      }),
+    });
+
+    const xstsData = await xstsRes.json();
+    if (xstsData.XErr) {
+      // Common error: User has no Gamertag created yet or is a Child account
+      throw new Error(`XSTS Error: ${xstsData.XErr}`);
+    }
+    if (!xstsRes.ok) throw new Error("XSTS Auth Failed");
+
+    // 4. Extract Key Info
+    const xstsToken = xstsData.Token;
+    const userHash = xstsData.DisplayClaims.xui[0].uhs; // "User Hash String"
+
+    // 5. Fetch Profile (to confirm it worked)
+    console.log("👤 [Xbox] Fetching Gamertag...");
+    const profileRes = await fetch(
+      `https://profile.xboxlive.com/users/me/profile/settings?settings=Gamertag,GameDisplayPicRaw`,
+      {
+        headers: {
+          "x-xbl-contract-version": "2",
+          Authorization: `XBL3.0 x=${userHash};${xstsToken}`,
+          "Accept-Language": "en-US",
+        },
+      }
+    );
+
+    const profileData = await profileRes.json();
+    const userSettings = profileData.profileUsers[0].settings;
+    const gamertag = userSettings.find((s) => s.id === "Gamertag").value;
+    const gamerpic = userSettings.find((s) => s.id === "GameDisplayPicRaw").value;
+    const xuid = profileData.profileUsers[0].id;
+
+    console.log(`✅ [Xbox] Logged in as: ${gamertag}`);
+
+    // Return everything needed for future calls
+    res.json({
+      gamertag,
+      gamerpic,
+      xuid,
+      xstsToken,
+      userHash,
+      // You should store these securely or send back to client
+      accessToken, // Microsoft Access Token (for refreshing later)
+      refreshToken: tokenData.refresh_token,
+    });
+  } catch (err) {
+    console.error("❌ Xbox Login Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // BOOTSTRAP ENDPOINT
 app.get("/api/login", async (req, res) => {

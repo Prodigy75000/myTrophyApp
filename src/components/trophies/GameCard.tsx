@@ -14,14 +14,14 @@ import { formatDate } from "../../utils/formatDate";
 import ProgressCircle from "../ProgressCircle";
 
 // Styles
-import { IMG_SIZE, styles } from "./GameCard.styles";
+import { IMG_SIZE, styles } from "../../styles/GameCard.styles";
 
 // ... Assets ...
 const ICONS = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 type StatItemProps = {

@@ -17,8 +17,7 @@ import { PROXY_BASE_URL } from "../config/endpoints";
 import { useTrophy } from "../providers/TrophyContext";
 
 // Custom Hooks
-import { PlatformFilter } from "../components/HeaderActionBar";
-import { useTrophyFilter } from "../hooks/useTrophyFilter";
+import { useTrophyFilter } from "../src/hooks/useTrophyFilter";
 
 // ⚠️ DATA LOADING STRATEGY
 // We statically import the "High Quality" database.
@@ -29,16 +28,17 @@ import masterGamesRaw from "../data/master_games.json";
 import HeaderActionBar, {
   FilterMode,
   OwnershipMode,
+  PlatformFilter,
   SortDirection,
   SortMode,
   ViewMode,
-} from "../components/HeaderActionBar";
-import GameCard from "../components/trophies/GameCard";
-import GameGridItem from "../components/trophies/GameGridItem";
-import ProfileDashboard from "../components/trophies/ProfileDashboard";
+} from "../src/components/HeaderActionBar";
+import GameCard from "../src/components/trophies/GameCard";
+import GameGridItem from "../src/components/trophies/GameGridItem";
+import ProfileDashboard from "../src/components/trophies/ProfileDashboard";
 
 // Styles
-import { styles } from "./index.styles";
+import { styles } from "../src/styles/index.styles";
 
 const BASE_HEADER_HEIGHT = 60;
 const STORAGE_KEY_GRID = "USER_GRID_COLUMNS";

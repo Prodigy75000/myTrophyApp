@@ -1,7 +1,7 @@
 // hooks/useTrophyWatchdog.ts
 import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
-import { PROXY_BASE_URL } from "../config/endpoints";
+import { PROXY_BASE_URL } from "../../config/endpoints";
 
 type WatchdogProps = {
   accessToken: string | null;

@@ -5,7 +5,7 @@ import { Modal, Pressable, Text, TextInput, TouchableOpacity, View } from "react
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Styles
-import { styles } from "./TrophyListHeader.styles";
+import { styles } from "../../styles/TrophyListHeader.styles";
 
 export type TrophySortMode = "DEFAULT" | "NAME" | "RARITY" | "STATUS" | "DATE_EARNED";
 export type SortDirection = "ASC" | "DESC";

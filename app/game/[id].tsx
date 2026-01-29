@@ -1,25 +1,25 @@
-// app/game/[id].tsx
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, RefreshControl, StyleSheet, View } from "react-native";
+import { Animated, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import TrophySkeleton from "../../components/skeletons/TrophySkeleton";
-import GameHero from "../../components/trophies/GameHero";
-import TrophyActionSheet from "../../components/trophies/TrophyActionSheet";
-import TrophyCard from "../../components/trophies/TrophyCard";
-import TrophyGroupHeader from "../../components/trophies/TrophyGroupHeader";
+import { useTrophy } from "../../providers/TrophyContext";
+import TrophySkeleton from "../../src/components/skeletons/TrophySkeleton";
+import GameHero from "../../src/components/trophies/GameHero";
+import TrophyActionSheet from "../../src/components/trophies/TrophyActionSheet";
+import TrophyCard from "../../src/components/trophies/TrophyCard";
+import TrophyGroupHeader from "../../src/components/trophies/TrophyGroupHeader";
 import TrophyListHeader, {
   TrophySortMode,
-} from "../../components/trophies/TrophyListHeader";
-import { useGameDetails } from "../../hooks/useGameDetails";
-import { useTrophy } from "../../providers/TrophyContext";
-import { normalizeTrophyType } from "../../utils/normalizeTrophy";
+} from "../../src/components/trophies/TrophyListHeader";
+import { useGameDetails } from "../../src/hooks/game-details/useGameDetails";
+import { styles } from "../../src/styles/GameScreen.styles"; // 🟢 Imported Styles
+import { normalizeTrophyType } from "../../src/utils/normalizeTrophy";
 
 // ⚠️ IMPORT MASTER DATA
 import masterGamesRaw from "../../data/master_games.json";
 
 const HEADER_HEIGHT = 60;
+const ZERO_COUNTS = { bronze: 0, silver: 0, gold: 0, platinum: 0 };
 
 export default function GameScreen() {
   const { id: rawId, artParam, contextMode } = useLocalSearchParams();
@@ -40,7 +40,7 @@ export default function GameScreen() {
   // --- DATA HOOK ---
   const {
     game,
-    isLoadingDetails, // 🟢 Renamed for clarity: Only affects the list!
+    isLoadingDetails,
     refreshing,
     onRefresh,
     processedTrophies,
@@ -48,9 +48,7 @@ export default function GameScreen() {
     justEarnedIds,
   } = useGameDetails(gameId, searchText, sortMode as any, sortDirection);
 
-  // --- 🟢 STALE DATA CHECK ---
-  // If we have a game object, but its ID doesn't match the URL,
-  // it means the hook hasn't updated yet. We show skeletons for the LIST only.
+  // --- STALE DATA CHECK ---
   const isDataStale = game && String(game.npCommunicationId) !== String(gameId);
   const showListSkeletons = isLoadingDetails || isDataStale || !game;
 
@@ -101,7 +99,7 @@ export default function GameScreen() {
   useEffect(() => {
     scrollY.setValue(0);
     setCollapsedGroups(new Set());
-  }, [gameId]);
+  }, [gameId, scrollY]); // 🟢 FIXED: Added scrollY dependency
 
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -119,7 +117,12 @@ export default function GameScreen() {
   const toggleGroup = (id: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      // 🟢 FIXED: Replaced ternary with if/else to satisfy linter
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -149,7 +152,7 @@ export default function GameScreen() {
       </Animated.View>
 
       <Animated.ScrollView
-        contentContainerStyle={{ paddingTop: totalHeaderHeight, paddingBottom: 40 }}
+        contentContainerStyle={[styles.listContent, { paddingTop: totalHeaderHeight }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -162,15 +165,15 @@ export default function GameScreen() {
         })}
         scrollEventThrottle={16}
       >
-        {/* 🟢 HERO: Render IMMEDIATELY if 'game' exists (Cached Data) */}
+        {/* 🟢 HERO: FIXED TYPES */}
         {game && (
           <GameHero
-            iconUrl={game.trophyTitleIconUrl}
-            title={game.trophyTitleName}
+            iconUrl={game.trophyTitleIconUrl ?? ""} // 🟢 FIXED
+            title={game.trophyTitleName ?? "Unknown Title"}
             platform={game.trophyTitlePlatform}
             progress={game.progress}
-            earnedTrophies={game.earnedTrophies}
-            definedTrophies={game.definedTrophies}
+            earnedTrophies={game.earnedTrophies ?? ZERO_COUNTS} // 🟢 FIXED
+            definedTrophies={game.definedTrophies ?? ZERO_COUNTS} // 🟢 FIXED
             displayArt={typeof artParam === "string" ? artParam : null}
             versions={versions}
             activeId={gameId}
@@ -178,16 +181,16 @@ export default function GameScreen() {
           />
         )}
 
-        {/* 🟢 SKELETONS: Only for the list area while details fetch */}
+        {/* SKELETONS */}
         {showListSkeletons && (
-          <View style={{ paddingTop: 20, paddingHorizontal: 16 }}>
+          <View style={styles.skeletonContainer}>
             {Array.from({ length: 8 }).map((_, i) => (
               <TrophySkeleton key={i} />
             ))}
           </View>
         )}
 
-        {/* 🟢 TROPHY LIST: Show only when data is ready */}
+        {/* TROPHY LIST */}
         {!showListSkeletons && (
           <View>
             {sortMode === "DEFAULT" && groupedData
@@ -240,6 +243,7 @@ export default function GameScreen() {
   );
 }
 
+// 🟢 Helper to map props cleanly
 const mapTrophyToProps = (
   trophy: any,
   justEarnedIds: Set<number>,
@@ -262,16 +266,4 @@ const mapTrophyToProps = (
       type: normalizeTrophyType(trophy.trophyType),
       iconUrl: trophy.trophyIconUrl,
     }),
-});
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  headerContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    backgroundColor: "#000",
-  },
 });

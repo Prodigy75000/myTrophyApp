@@ -9,7 +9,7 @@ import { TrophyType } from "../../utils/normalizeTrophy";
 import SmartGuideModal from "./SmartGuideModal";
 
 // Styles
-import { styles } from "./TrophyActionSheet.styles";
+import { styles } from "../../styles/TrophyActionSheet.styles";
 
 // ---------------------------------------------------------------------------
 // TYPES & ASSETS
@@ -26,10 +26,10 @@ type ActionSheetProps = {
 };
 
 const TROPHY_ICONS: Record<string, any> = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 const RANK_COLORS: Record<string, string> = {

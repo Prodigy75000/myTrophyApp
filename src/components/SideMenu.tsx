@@ -2,80 +2,37 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React from "react";
 import { Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { handlePSNBootstrap } from "../api/handlePSNBootstrap";
-import { handleXboxBootstrap } from "../api/handleXBOXBootstrap"; // 🟢 Import Xbox
-import { PROXY_BASE_URL } from "../config/endpoints";
-import { useTrophy } from "../providers/TrophyContext";
+import { useTrophy } from "../../providers/TrophyContext";
+import { usePsnAuth } from "../hooks/auth/usePsnAuth"; // 🟢 New Hook
+import { useXboxAuth } from "../hooks/auth/useXboxAuth"; // 🟢 New Hook
+import { styles } from "../styles/SideMenu.styles"; // 🟢 Correct Path
 import LoginModal from "./LoginModal";
-import { styles } from "./SideMenu.styles";
 
 export default function SideMenu() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const {
-    user,
-    handleLoginResponse,
-    setTrophies,
-    logout,
-    accountId,
-    // 🟢 Grab Xbox Setters
-    setXboxTitles,
-    setXboxProfile,
-  } = useTrophy();
+  // Context Data
+  const { user, logout, accountId } = useTrophy();
 
-  const [showLogin, setShowLogin] = useState(false);
-
-  // PSN
-  const onPSNBootstrapPress = useCallback(async () => {
-    await handlePSNBootstrap({ handleLoginResponse, setTrophies });
-  }, [handleLoginResponse, setTrophies]);
-
-  // 🟢 Xbox
-  const onXboxBootstrapPress = useCallback(async () => {
-    await handleXboxBootstrap({ setXboxTitles, setXboxProfile });
-    Alert.alert("Xbox Loaded", "Mock Xbox data has been injected into the list.");
-  }, [setXboxTitles, setXboxProfile]);
+  // Auth Hooks
+  const { login: loginXbox } = useXboxAuth();
+  const { showLoginModal, setShowLoginModal, loginGuest, onLoginSuccess } = usePsnAuth();
 
   const handleLogout = () => {
     Alert.alert("Sign Out", "Are you sure you want to disconnect?", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-        },
-      },
+      { text: "Sign Out", style: "destructive", onPress: logout },
     ]);
   };
 
-  const onLoginSuccess = async (npsso: string) => {
-    try {
-      setShowLogin(false);
-      console.log("🔄 Sending NPSSO to Backend...");
-
-      const response = await fetch(`${PROXY_BASE_URL}/api/auth/npsso`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ npsso }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Exchange failed");
-
-      console.log("✅ Login Complete:", data.onlineId);
-      await handleLoginResponse(data);
-    } catch (error: any) {
-      Alert.alert("Login Failed", error.message);
-    }
-  };
-
   const navigateHome = () => router.navigate("/");
+
+  // UI Helpers
   const avatarUrl = user?.avatarUrl ?? "https://i.imgur.com/6Cklq5z.png";
   const username = user?.onlineId ?? "Guest Player";
   const level = user?.trophyLevel ?? 1;
@@ -126,7 +83,7 @@ export default function SideMenu() {
           <View style={{ gap: 10 }}>
             <TouchableOpacity
               style={styles.webButton}
-              onPress={() => setShowLogin(true)}
+              onPress={() => setShowLoginModal(true)}
               activeOpacity={0.8}
             >
               <MaterialCommunityIcons
@@ -137,10 +94,9 @@ export default function SideMenu() {
               />
               <Text style={styles.webButtonText}>Sign In with PSN</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.guestButton}
-              onPress={onPSNBootstrapPress}
+              onPress={loginGuest}
               activeOpacity={0.8}
             >
               <Ionicons
@@ -156,8 +112,8 @@ export default function SideMenu() {
       </LinearGradient>
 
       <LoginModal
-        visible={showLogin}
-        onClose={() => setShowLogin(false)}
+        visible={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
         onSuccess={onLoginSuccess}
       />
 
@@ -171,9 +127,7 @@ export default function SideMenu() {
           <Text style={styles.menuText}>Home</Text>
           <Ionicons name="chevron-forward" size={16} color="#444" />
         </TouchableOpacity>
-
         <View style={styles.divider} />
-
         <Text style={styles.sectionLabel}>Settings</Text>
         <TouchableOpacity style={styles.menuRow} activeOpacity={0.5}>
           <View
@@ -189,15 +143,14 @@ export default function SideMenu() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.footerRow}>
           <Text style={styles.versionText}>TrophyHub v0.9 (Beta)</Text>
-
-          {/* 🟢 DEV BUTTONS SIDE-BY-SIDE */}
           <View style={styles.devActions}>
-            <TouchableOpacity style={styles.devButtonPSN} onPress={onPSNBootstrapPress}>
+            <TouchableOpacity style={styles.devButtonPSN} onPress={loginGuest}>
               <Ionicons name="flash" size={12} color="#4da3ff" />
               <Text style={styles.devTextPSN}>PSN</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.devButtonXbox} onPress={onXboxBootstrapPress}>
+            {/* 🟢 CLEAN XBOX BUTTON CALL */}
+            <TouchableOpacity style={styles.devButtonXbox} onPress={loginXbox}>
               <Ionicons name="flash" size={12} color="#107c10" />
               <Text style={styles.devTextXbox}>Xbox</Text>
             </TouchableOpacity>

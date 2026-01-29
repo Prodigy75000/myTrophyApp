@@ -22,10 +22,10 @@ type DashboardProps = {
 };
 
 const TROPHY_ICONS = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 const DEFAULT_AVATAR = "https://i.psnprofiles.com/avatars/l/G566B09312.png";

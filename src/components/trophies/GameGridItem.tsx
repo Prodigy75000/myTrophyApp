@@ -1,4 +1,3 @@
-// components/trophies/GameGridItem.tsx
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -7,19 +6,19 @@ import {
   Dimensions,
   Image,
   Pressable,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { styles } from "../../styles/GameGridItem.styles";
 import ProgressCircle from "../ProgressCircle";
 import { GameVersion } from "./GameCard";
 
 const trophyIcons = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 type Props = {
@@ -33,7 +32,6 @@ type Props = {
   onPin?: (id: string) => void;
   isPeeking?: boolean;
   onTogglePeek?: () => void;
-  // 🟢 NEW PROP
   sourceMode?: "OWNED" | "GLOBAL" | "UNOWNED";
 };
 
@@ -48,7 +46,7 @@ const GameGridItem = ({
   onPin,
   isPeeking = false,
   onTogglePeek,
-  sourceMode, // 🟢 Destructure
+  sourceMode,
 }: Props) => {
   const router = useRouter();
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -96,7 +94,7 @@ const GameGridItem = ({
         Animated.timing(glowAnim, { toValue: 0, duration: 1000, useNativeDriver: false }),
       ]).start();
     }
-  }, [justUpdated]);
+  }, [justUpdated, glowAnim]);
 
   const borderColor = glowAnim.interpolate({
     inputRange: [0, 1],
@@ -109,7 +107,6 @@ const GameGridItem = ({
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       router.push({
         pathname: "/game/[id]",
-        // 🟢 PASS THE MODE
         params: { id: activeVer.id, artParam: heroArt || icon, contextMode: sourceMode },
       });
       lastTapRef.current = 0;
@@ -137,7 +134,7 @@ const GameGridItem = ({
             justifyContent: "center",
             alignItems: "center",
             borderWidth: justUpdated ? 2 : 0,
-            borderColor: borderColor,
+            borderColor,
           }}
         >
           <Image
@@ -145,6 +142,7 @@ const GameGridItem = ({
             style={{ width: "100%", height: "100%" }}
             resizeMode={dynamicResizeMode}
           />
+
           {isPS5 && <View style={styles.overlay} />}
 
           {!isPeeking && (
@@ -245,71 +243,5 @@ const PeekRow = ({ icon, earned, total }: any) => (
     </Text>
   </View>
 );
-
-const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.1)" },
-  titleBadge: {
-    position: "absolute",
-    top: 4,
-    left: 4,
-    right: 28,
-    zIndex: 5,
-  },
-  titleText: {
-    color: "white",
-    fontSize: 9,
-    fontWeight: "800",
-    textShadowColor: "rgba(0,0,0,0.9)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-    opacity: 0.9,
-  },
-  versionRow: {
-    position: "absolute",
-    bottom: 4,
-    left: 4,
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.85)",
-    borderRadius: 4,
-    padding: 2,
-    gap: 2,
-    zIndex: 10,
-  },
-  versionBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-  versionActive: { backgroundColor: "#4da3ff" },
-  versionInactive: { backgroundColor: "transparent" },
-  versionText: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
-  progressContainer: {
-    position: "absolute",
-    bottom: 4,
-    right: 4,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 20,
-    padding: 1,
-  },
-  peekOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 99,
-  },
-  peekContent: { gap: 4, alignItems: "flex-start" },
-  peekRow: { flexDirection: "row", alignItems: "center" },
-  peekIcon: { width: 16, height: 16, marginRight: 6 },
-  peekText: { fontSize: 12, fontWeight: "600" },
-  pinButton: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 100,
-  },
-});
 
 export default React.memo(GameGridItem);

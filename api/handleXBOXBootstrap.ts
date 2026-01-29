@@ -1,5 +1,5 @@
 // api/handleXBOXBootstrap.ts
-import { XboxTitle } from "../types/XboxTypes";
+import { XboxTitle } from "../src/types/XboxTypes";
 
 const MOCK_XBOX_GAMES: XboxTitle[] = [
   // 1. ELDEN RING (Overlap Test)

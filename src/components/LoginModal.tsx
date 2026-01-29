@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
-import { styles } from "./SideMenu.styles";
+import { styles } from "../styles/SideMenu.styles";
 
 // 🟢 1. CONSTANTS (Clean Configuration)
 const AUTHORIZE_URL = "https://ca.account.sony.com/api/authz/v3/oauth/authorize";
@@ -132,7 +132,12 @@ export default function LoginModal({ visible, onClose, onSuccess }: LoginModalPr
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      statusBarTranslucent={true}
+    >
       <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
         <View style={styles.modalHeader}>
           <TouchableOpacity

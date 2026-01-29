@@ -15,10 +15,10 @@ import {
 // ---------------------------------------------------------------------------
 
 const ICONS = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 type CountSet = {

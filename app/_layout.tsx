@@ -12,7 +12,7 @@ import { RecentGamesProvider } from "../context/RecentGamesContext";
 import { TrophyProvider } from "../providers/TrophyContext";
 
 // Components
-import SideMenu from "../components/SideMenu";
+import SideMenu from "../src/components/SideMenu";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();

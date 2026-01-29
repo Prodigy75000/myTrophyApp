@@ -7,7 +7,7 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import ProgressCircle from "../ProgressCircle";
 
 // Styles
-import { BASE_ICON_HEIGHT, styles } from "./GameHero.styles";
+import { BASE_ICON_HEIGHT, styles } from "../../styles/GameHero.styles";
 
 type HeroProps = {
   iconUrl: string;

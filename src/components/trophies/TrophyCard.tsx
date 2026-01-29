@@ -8,13 +8,13 @@ import { TrophyType } from "../../utils/normalizeTrophy";
 import { getRarityTier, RARITY_TIERS } from "../../utils/rarity";
 
 // Styles
-import { styles } from "./TrophyCard.styles";
+import { styles } from "../../styles/TrophyCard.styles";
 
 const ICONS = {
-  bronze: require("../../assets/icons/trophies/bronze.png"),
-  silver: require("../../assets/icons/trophies/silver.png"),
-  gold: require("../../assets/icons/trophies/gold.png"),
-  platinum: require("../../assets/icons/trophies/platinum.png"),
+  bronze: require("../../../assets/icons/trophies/bronze.png"),
+  silver: require("../../../assets/icons/trophies/silver.png"),
+  gold: require("../../../assets/icons/trophies/gold.png"),
+  platinum: require("../../../assets/icons/trophies/platinum.png"),
 };
 
 // ---------------------------------------------------------------------------

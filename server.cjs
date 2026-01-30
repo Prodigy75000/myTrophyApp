@@ -84,31 +84,47 @@ async function fetchPSN(url, userToken) {
 // 🟢 ROUTE: EXCHANGE OAUTH CODE FOR XSTS TOKENS
 app.post("/xbox/exchange", async (req, res) => {
   const { code, redirectUri, codeVerifier } = req.body;
-
+  // 🟢 DIAGNOSTIC LOG (The Trap)
+  console.log("📦 [Server] Received Payload:");
+  console.log("   - Code Length:", code ? code.length : "MISSING");
+  console.log("   - Redirect URI:", redirectUri);
+  console.log(
+    "   - Verifier:",
+    codeVerifier ? codeVerifier.substring(0, 10) + "..." : "UNDEFINED"
+  );
   try {
     console.log("🔄 [Xbox] Step 1: Exchanging OAuth Code...");
 
-    // 1. Exchange Code for Microsoft Access Token
-    const tokenParams = new URLSearchParams({
-      client_id: AZURE_CLIENT_ID,
-      scope: "XboxLive.Signin offline_access",
-      code: code,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: codeVerifier, // PKCE Security
-    });
+    // 🟢 FIX: Use Microsoft V2 Endpoint (Matches Frontend)
+    const tokenUrl = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 
-    const tokenRes = await fetch("https://login.live.com/oauth20_token.srf", {
+    // 🟢 FIX: Send as x-www-form-urlencoded (Required by V2)
+    const params = new URLSearchParams();
+    params.append("client_id", AZURE_CLIENT_ID);
+    params.append("scope", "XboxLive.Signin offline_access");
+    params.append("code", code);
+    params.append("redirect_uri", redirectUri);
+    params.append("grant_type", "authorization_code");
+    params.append("code_verifier", codeVerifier);
+
+    const tokenRes = await fetch(tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: tokenParams.toString(),
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
 
     const tokenData = await tokenRes.json();
-    if (!tokenRes.ok)
+
+    // Debugging Help
+    if (!tokenRes.ok) {
+      console.error("❌ Token Exchange Failed:", JSON.stringify(tokenData, null, 2));
       throw new Error(tokenData.error_description || "OAuth Exchange Failed");
+    }
 
     const accessToken = tokenData.access_token;
+    console.log("✅ Access Token Acquired!");
 
     // 2. Exchange Access Token for Xbox Live User Token
     console.log("🔄 [Xbox] Step 2: Getting User Token...");

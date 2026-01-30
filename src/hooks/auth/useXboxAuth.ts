@@ -1,15 +1,17 @@
-// hooks/auth/useXboxAuth.ts
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// src/hooks/auth/useXboxAuth.ts
 import * as AuthSession from "expo-auth-session";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Alert } from "react-native";
 import { PROXY_BASE_URL } from "../../../config/endpoints";
 import { useTrophy } from "../../../providers/TrophyContext";
-import { generatePKCE } from "../../utils/authHelpers"; // 🟢 Import Helper
 
 const CLIENT_ID = "5e278654-b281-411b-85f4-eb7fb056e5ba";
-const REDIRECT_URI = "com.scee.psxandroid.scecompcall://auth";
-const STORAGE_KEY_VERIFIER = "xbox_auth_verifier";
+
+// 🟢 Helper to match the redirect URI exactly
+const REDIRECT_URI = AuthSession.makeRedirectUri({
+  scheme: "com.scee.psxandroid.scecompcall",
+  path: "auth",
+});
 
 const DISCOVERY = {
   authorizationEndpoint:
@@ -20,13 +22,41 @@ const DISCOVERY = {
 export function useXboxAuth() {
   const { setXboxProfile } = useTrophy();
 
-  const exchangeCode = useCallback(
-    async (code: string) => {
-      try {
-        const storedVerifier = await AsyncStorage.getItem(STORAGE_KEY_VERIFIER);
-        if (!storedVerifier) throw new Error("State Loss: Verifier missing.");
+  // 🟢 GUARD: Prevents the "Double-Exchange" bug in development
+  const exchangingRef = useRef(false);
 
-        console.log("🔄 Exchanging Code...");
+  // 🟢 HOOK: Expo handles the entire lifecycle (Key generation + Validation)
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI,
+      scopes: ["XboxLive.Signin", "offline_access"],
+      responseType: AuthSession.ResponseType.Code,
+      usePKCE: true, // Automatically handles S256 Challenge & Verifier
+      extraParams: { prompt: "select_account" },
+    },
+    DISCOVERY
+  );
+
+  useEffect(() => {
+    const handleExchange = async () => {
+      // 1. Validation Checks
+      if (response?.type !== "success") return;
+      if (exchangingRef.current) return; // 🛑 Stop if we are already exchanging
+
+      const code = response.params.code;
+      const codeVerifier = request?.codeVerifier;
+
+      if (!codeVerifier) {
+        Alert.alert("Login Error", "State mismatch: PKCE Verifier is missing.");
+        return;
+      }
+
+      // 2. Lock the guard
+      exchangingRef.current = true;
+
+      try {
+        console.log("🔄 Exchanging Code (Hook Managed)...");
 
         const res = await fetch(`${PROXY_BASE_URL}/xbox/exchange`, {
           method: "POST",
@@ -34,7 +64,7 @@ export function useXboxAuth() {
           body: JSON.stringify({
             code,
             redirectUri: REDIRECT_URI,
-            codeVerifier: storedVerifier,
+            codeVerifier,
           }),
         });
 
@@ -49,44 +79,25 @@ export function useXboxAuth() {
           xuid: data.xuid,
         });
 
-        await AsyncStorage.removeItem(STORAGE_KEY_VERIFIER);
         Alert.alert("Xbox Connected", `Logged in as ${data.gamertag}`);
       } catch (e: any) {
+        console.error("Xbox Auth Error:", e);
         Alert.alert("Xbox Login Failed", e.message);
+        // Unlock on error so user can try again
+        exchangingRef.current = false;
       }
-    },
-    [setXboxProfile]
-  );
+    };
 
-  const login = useCallback(async () => {
-    try {
-      // 🟢 1. USE NEW HELPER
-      const { codeVerifier, codeChallenge } = await generatePKCE();
+    handleExchange();
+  }, [response, request, setXboxProfile]);
 
-      console.log("💾 Saving Verifier:", codeVerifier.substring(0, 5) + "...");
-      await AsyncStorage.setItem(STORAGE_KEY_VERIFIER, codeVerifier);
-
-      // 🟢 2. CREATE REQUEST
-      const request = new AuthSession.AuthRequest({
-        clientId: CLIENT_ID,
-        redirectUri: REDIRECT_URI,
-        scopes: ["XboxLive.Signin", "offline_access"],
-        responseType: AuthSession.ResponseType.Code,
-        codeChallenge: codeChallenge,
-        codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
-        extraParams: { prompt: "select_account" },
-      });
-
-      const result = await request.promptAsync(DISCOVERY);
-
-      if (result.type === "success") {
-        await exchangeCode(result.params.code);
-      }
-    } catch (e: any) {
-      console.error("Xbox Auth Error:", e);
-      Alert.alert("Error", e.message);
+  const login = useCallback(() => {
+    if (request) {
+      // Reset guard when user manually initiates a new login
+      exchangingRef.current = false;
+      promptAsync();
     }
-  }, [exchangeCode]);
+  }, [request, promptAsync]);
 
   return { login };
 }

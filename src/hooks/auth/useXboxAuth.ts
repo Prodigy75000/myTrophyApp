@@ -38,6 +38,8 @@ export function useXboxAuth() {
     DISCOVERY
   );
 
+  const { handleXboxLogin, fetchXboxGames } = useTrophy();
+
   useEffect(() => {
     const handleExchange = async () => {
       // 1. Validation Checks
@@ -73,10 +75,15 @@ export function useXboxAuth() {
 
         console.log("✅ Xbox Connected:", data.gamertag);
 
-        setXboxProfile({
-          gamertag: data.gamertag,
-          gamerpic: data.gamerpic,
+        // 🟢 1. Save to Context/Disk
+        await handleXboxLogin(data);
+
+        // 🟢 2. Fetch Games IMMEDIATELY (Pass fresh data directly)
+        // We don't wait for state to update or user to press OK
+        fetchXboxGames({
           xuid: data.xuid,
+          xsts: data.xstsToken,
+          hash: data.userHash,
         });
 
         Alert.alert("Xbox Connected", `Logged in as ${data.gamertag}`);

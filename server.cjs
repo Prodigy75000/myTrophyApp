@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const fs = require("fs"); // 🟢 ADD THIS at the top with other requires
 console.log(
   "🔑 LOADED NPSSO:",
   process.env.NPSSO ? process.env.NPSSO.substring(0, 5) + "..." : "UNDEFINED"
@@ -80,6 +81,48 @@ async function fetchPSN(url, userToken) {
 // ---------------------------------------------------------------------------
 // ROUTES
 // ---------------------------------------------------------------------------
+
+// 🟢 ROUTE: FETCH XBOX TITLES (AND DUMP TO FILE)
+app.post("/xbox/titles", async (req, res) => {
+  const { xuid, xstsToken, userHash } = req.body;
+
+  if (!xuid || !xstsToken || !userHash) {
+    return res.status(400).json({ error: "Missing Xbox credentials" });
+  }
+
+  try {
+    console.log(`⏳ Fetching Xbox Games for ${xuid}...`);
+
+    // Modern TitleHub API (Includes Xbox One, Series X|S, and some 360)
+    const url = `https://titlehub.xboxlive.com/users/xuid(${xuid})/titles/titlehistory/decoration/scid,image,detail`;
+
+    const response = await fetch(url, {
+      headers: {
+        "x-xbl-contract-version": "2",
+        Authorization: `XBL3.0 x=${userHash};${xstsToken}`,
+        "Accept-Language": "en-US",
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("❌ Xbox TitleHub Error:", errText);
+      throw new Error("Failed to fetch Xbox Titles");
+    }
+
+    const data = await response.json();
+
+    // 🟢 DUMP TO FILE (For Inspection)
+    const dumpPath = "./xbox_dump.json";
+    fs.writeFileSync(dumpPath, JSON.stringify(data, null, 2));
+    console.log(`📁 Data dumped to ${dumpPath}`);
+
+    res.json(data);
+  } catch (err) {
+    console.error("❌ Xbox Fetch Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 🟢 ROUTE: EXCHANGE OAUTH CODE FOR XSTS TOKENS
 app.post("/xbox/exchange", async (req, res) => {
